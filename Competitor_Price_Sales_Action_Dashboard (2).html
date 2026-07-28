@@ -103,10 +103,7 @@
     <div class="bg-white rounded-lg border border-slate-200 p-2"><div id="chartPrice" style="height:340px"></div></div>
     <div class="bg-white rounded-lg border border-slate-200 p-2"><div id="chartSales" style="height:340px"></div></div>
     <div class="bg-white rounded-lg border border-slate-200 p-2"><div id="chartRank" style="height:340px"></div></div>
-    <div class="bg-white rounded-lg border border-slate-200 p-2"><div id="chartScatter1" style="height:340px"></div></div>
-    <div class="bg-white rounded-lg border border-slate-200 p-2"><div id="chartScatter2" style="height:340px"></div></div>
     <div class="bg-white rounded-lg border border-slate-200 p-2"><div id="chartBrand" style="height:340px"></div></div>
-    <div class="bg-white rounded-lg border border-slate-200 p-2 lg:col-span-2"><div id="chartAction" style="height:300px"></div></div>
   </section>
 
   <!-- Action view tabs + main table -->
@@ -864,23 +861,7 @@ function renderCharts(rows){
     {x:rl,y:rk.map(a=>a.benchRank),name:"Benchmark Rank",type:"bar",marker:{color:"#f97316"}}
   ],Object.assign({title:"Sales Rank (lower = better)",barmode:"group",xaxis:{tickangle:-40}},LAY),{displaylogo:false,responsive:true});
 
-  // 4 scatter price gap vs sales multiple
-  const sc=rows.filter(a=>isFinite(a.gapPct)&&isFinite(a.salesMultiple));
-  const grp={}; sc.forEach(a=>{(grp[a.recAction]=grp[a.recAction]||[]).push(a);});
-  Plotly.react("chartScatter1",Object.keys(grp).map(k=>({
-    x:grp[k].map(a=>a.gapPct),y:grp[k].map(a=>a.salesMultiple),text:grp[k].map(a=>a.ourAsin),name:k,mode:"markers",type:"scatter",
-    marker:{size:grp[k].map(a=>Math.max(6,Math.min(40,Math.sqrt(a.totalStock||1)/3)))}
-  })),Object.assign({title:"Price Gap % vs Competitor Sales Multiple (size=stock)",xaxis:{title:"Price Gap %"},yaxis:{title:"Sales Multiple"}},LAY),{displaylogo:false,responsive:true});
-
-  // 5 scatter stock days vs recommended change
-  const sc2=rows.filter(a=>isFinite(a.stockDays)&&isFinite(a.changePct));
-  const grp2={}; sc2.forEach(a=>{(grp2[a.stockRisk]=grp2[a.stockRisk]||[]).push(a);});
-  Plotly.react("chartScatter2",Object.keys(grp2).map(k=>({
-    x:grp2[k].map(a=>Math.min(a.stockDays,400)),y:grp2[k].map(a=>a.changePct),text:grp2[k].map(a=>a.ourAsin),name:k,mode:"markers",type:"scatter",
-    marker:{size:grp2[k].map(a=>Math.max(6,Math.min(34,Math.sqrt(a.ourSales||1))))}
-  })),Object.assign({title:"Stock Days vs Recommended Price Change % (size=sales)",xaxis:{title:"Stock Days (capped 400)"},yaxis:{title:"Change %"}},LAY),{displaylogo:false,responsive:true});
-
-  // 6 brand comparison
+  // 4 brand comparison
   const bagg={};
   MODEL.comp.forEach(c=>{ if(!c.compBrand) return;
     const asinMatch = rows.some(a=>a.ourAsin===c.ourAsin); if(!asinMatch) return;
@@ -895,16 +876,6 @@ function renderCharts(rows){
     {x:brands,y:brands.map(b=>avg(bagg[b].s)),name:"Avg Sales",yaxis:"y2",type:"scatter",mode:"markers",marker:{color:"#f97316",size:9}}
   ],Object.assign({title:"Competitor Brands — Avg Price & Sales (top 15)",xaxis:{tickangle:-40},yaxis:{title:"₹"},yaxis2:{overlaying:"y",side:"right",title:"units"}},LAY),{displaylogo:false,responsive:true})
    .then(gd=>{ gd.removeAllListeners&&gd.removeAllListeners("plotly_click"); gd.on("plotly_click",e=>relayoutBrandFilter(e.points[0].x)); });
-
-  // 7 action distribution
-  const acts=["Reduce Price","Match Competitor","Maintain Price","Increase Price","Price Is Not the Problem","Low Stock - Do Not Reduce"];
-  const contentN=rows.filter(a=>a.nonPriceActions.some(x=>/A\+|Video|Images/.test(x))).length;
-  const stockN=rows.filter(a=>a.nonPriceActions.some(x=>/Stock/.test(x))).length;
-  Plotly.react("chartAction",[{
-    x:acts.concat("Content Action","Stock Action"),
-    y:acts.map(k=>rows.filter(a=>a.recAction===k).length).concat(contentN,stockN),
-    type:"bar",marker:{color:["#dc2626","#4f46e5","#16a34a","#0891b2","#9333ea","#d97706","#2563eb","#334155"]}
-  }],Object.assign({title:"Action Distribution"},LAY),{displaylogo:false,responsive:true});
 }
 
 /* ---------- grids ---------- */
