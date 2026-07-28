@@ -17,7 +17,9 @@
   .kpi.active{ outline:2px solid #2563eb; outline-offset:-2px; }
   .tab{ cursor:pointer; }
   .tab.active{ background:#1e293b; color:#fff; }
-  .ag-theme-quartz{ --ag-font-size:12px; --ag-header-background-color:#1e293b; --ag-header-foreground-color:#fff; --ag-row-height:34px; --ag-header-height:40px; }
+  .ag-theme-quartz{ --ag-font-size:12px; --ag-header-background-color:#1e293b; --ag-header-foreground-color:#fff; --ag-row-height:34px; --ag-header-height:38px; }
+  .ag-theme-quartz .ag-header-group-cell{ background:#0f172a; color:#fff; font-weight:700; font-size:12px; border-right:1px solid #334155; text-align:center; }
+  .ag-theme-quartz .ag-header-group-cell-label{ justify-content:center; }
   .badge{ padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:600; display:inline-block; white-space:nowrap; }
   .pill-Critical{background:#fee2e2;color:#b91c1c}
   .pill-High{background:#ffedd5;color:#c2410c}
@@ -951,92 +953,136 @@ const ynFmt=p=>p.value?"Yes":"No";
 
 function mainColumns(){
   const acts=loadActions();
+  const G=(headerName,children)=>({headerName,marryChildren:true,children});
   return [
     {headerName:"Priority",field:"priorityTier",width:95,pinned:"left",cellRenderer:p=>pill(p.value)},
     {headerName:"Our ASIN",field:"ourAsin",width:120,pinned:"left"},
     {headerName:"SKU",field:"ourSku",width:90,pinned:"left"},
-    {headerName:"Product",field:"ourDesc",width:200,pinned:"left"},
-    {headerName:"Cat",field:"cat",width:110},
-    {headerName:"SubCat",field:"subcat",width:130},
-    {headerName:"Our Price",field:"ourPrice",width:100,valueFormatter:inrFmt,type:"numericColumn"},
-    {headerName:"Our Sales",field:"ourSales",width:95,valueFormatter:numFmt,type:"numericColumn"},
-    {headerName:"Our Rank",field:"ourRank",width:95,valueFormatter:numFmt,type:"numericColumn"},
-    {headerName:"Our Rating",field:"ourRating",width:90,valueFormatter:dec1,type:"numericColumn"},
-    {headerName:"Our Reviews",field:"ourReviews",width:100,valueFormatter:numFmt,type:"numericColumn"},
-    {headerName:"A+",field:"ourAplus",width:60,valueFormatter:ynFmt},
-    {headerName:"Video",field:"ourVideo",width:65,valueFormatter:ynFmt},
-    {headerName:"Imgs",field:"ourImg",width:65,valueFormatter:numFmt,type:"numericColumn"},
-    {headerName:"DRR",field:"drr",width:80,valueFormatter:dec1,type:"numericColumn"},
-    {headerName:"FC",field:"fcStock",width:80,valueFormatter:numFmt,type:"numericColumn"},
-    {headerName:"WH",field:"whStock",width:80,valueFormatter:numFmt,type:"numericColumn"},
-    {headerName:"Total Stock",field:"totalStock",width:100,valueFormatter:numFmt,type:"numericColumn"},
-    {headerName:"Stock Days",field:"stockDays",width:100,valueFormatter:p=>isFinite(p.value)?Number(p.value).toFixed(0):"",type:"numericColumn"},
-    {headerName:"Stock Risk",field:"stockRisk",width:130},
-    {headerName:"Bench ASIN",field:"benchAsin",width:120},
-    {headerName:"Bench Brand",field:"benchBrand",width:120},
-    {headerName:"Bench Price",field:"benchPrice",width:100,valueFormatter:inrFmt,type:"numericColumn"},
-    {headerName:"Bench Sales",field:"benchSales",width:100,valueFormatter:numFmt,type:"numericColumn"},
-    {headerName:"Bench Rank",field:"benchRank",width:100,valueFormatter:numFmt,type:"numericColumn"},
-    {headerName:"Bench Rating",field:"benchRating",width:100,valueFormatter:dec1,type:"numericColumn"},
-    {headerName:"Bench Reviews",field:"benchReviews",width:110,valueFormatter:numFmt,type:"numericColumn"},
-    {headerName:"B.A+",field:"benchAplus",width:60,valueFormatter:ynFmt},
-    {headerName:"B.Video",field:"benchVideo",width:70,valueFormatter:ynFmt},
-    {headerName:"B.Imgs",field:"benchImg",width:70,valueFormatter:numFmt,type:"numericColumn"},
-    {headerName:"Strength",field:"benchStrength",width:90,valueFormatter:dec1,type:"numericColumn"},
-    {headerName:"Price Diff",field:"priceDiff",width:95,valueFormatter:inrFmt,type:"numericColumn"},
-    {headerName:"Gap %",field:"gapPct",width:85,valueFormatter:pctFmt,type:"numericColumn"},
-    {headerName:"Sales Mult",field:"salesMultipleLabel",width:100},
-    {headerName:"Rank Gap",field:"rankGap",width:90,valueFormatter:numFmt,type:"numericColumn"},
-    {headerName:"Rating Gap",field:"ratingGap",width:95,valueFormatter:dec1,type:"numericColumn"},
-    {headerName:"Review Mult",field:"reviewMultiple",width:100,valueFormatter:p=>isFinite(p.value)?p.value.toFixed(1)+"x":"",type:"numericColumn"},
-    {headerName:"Price Action",field:"recAction",width:190,cellRenderer:p=>actPill(p.value)},
-    {headerName:"Test Price",field:"testPrice",width:100,valueFormatter:inrFmt,type:"numericColumn"},
-    {headerName:"Change %",field:"changePct",width:90,valueFormatter:pctFmt,type:"numericColumn"},
-    {headerName:"Primary Problem",field:"primaryProblem",width:170},
-    {headerName:"Primary Action",field:"primaryAction",width:180},
-    {headerName:"Secondary Action",field:"secondaryAction",width:180},
-    {headerName:"Bench Reason",field:"benchReason",width:260,tooltipField:"benchReason"},
-    {headerName:"Recommendation",field:"recReason",width:320,tooltipField:"recReason"},
-    {headerName:"Existing Status",field:"existingStatus",width:130},
-    {headerName:"Existing Priority",field:"existingPriority",width:130},
-    // editable tracking (localStorage)
-    {headerName:"Owner",field:"_owner",width:110,editable:true,valueGetter:p=>acts[p.data.ourAsin]?.owner||"",onCellValueChanged:e=>saveAction(e.data.ourAsin,"owner",e.newValue)},
-    {headerName:"Track Status",field:"_status",width:120,editable:true,valueGetter:p=>acts[p.data.ourAsin]?.status||"",onCellValueChanged:e=>saveAction(e.data.ourAsin,"status",e.newValue)},
-    {headerName:"Comments",field:"_comments",width:180,editable:true,valueGetter:p=>acts[p.data.ourAsin]?.comments||"",onCellValueChanged:e=>saveAction(e.data.ourAsin,"comments",e.newValue)},
-    {headerName:"Link",field:"link",width:70,cellRenderer:linkCell},
+    {headerName:"Product",field:"ourDesc",width:190,pinned:"left"},
+    G("Classification",[
+      {headerName:"Category",field:"cat",width:110},
+      {headerName:"Subcategory",field:"subcat",width:130},
+    ]),
+    G("Price",[
+      {headerName:"Our Price",field:"ourPrice",width:100,valueFormatter:inrFmt,type:"numericColumn"},
+      {headerName:"Benchmark Price",field:"benchPrice",width:120,valueFormatter:inrFmt,type:"numericColumn"},
+      {headerName:"Price Diff",field:"priceDiff",width:95,valueFormatter:inrFmt,type:"numericColumn"},
+      {headerName:"Gap %",field:"gapPct",width:85,valueFormatter:pctFmt,type:"numericColumn"},
+    ]),
+    G("Monthly Sales",[
+      {headerName:"Our Sales",field:"ourSales",width:95,valueFormatter:numFmt,type:"numericColumn"},
+      {headerName:"Benchmark Sales",field:"benchSales",width:120,valueFormatter:numFmt,type:"numericColumn"},
+      {headerName:"Sales Mult",field:"salesMultipleLabel",width:100},
+    ]),
+    G("Sales Rank",[
+      {headerName:"Our Rank",field:"ourRank",width:95,valueFormatter:numFmt,type:"numericColumn"},
+      {headerName:"Benchmark Rank",field:"benchRank",width:120,valueFormatter:numFmt,type:"numericColumn"},
+      {headerName:"Rank Gap",field:"rankGap",width:90,valueFormatter:numFmt,type:"numericColumn"},
+    ]),
+    G("Rating",[
+      {headerName:"Our Rating",field:"ourRating",width:95,valueFormatter:dec1,type:"numericColumn"},
+      {headerName:"Benchmark Rating",field:"benchRating",width:125,valueFormatter:dec1,type:"numericColumn"},
+      {headerName:"Rating Gap",field:"ratingGap",width:95,valueFormatter:dec1,type:"numericColumn"},
+    ]),
+    G("Reviews",[
+      {headerName:"Our Reviews",field:"ourReviews",width:105,valueFormatter:numFmt,type:"numericColumn"},
+      {headerName:"Benchmark Reviews",field:"benchReviews",width:130,valueFormatter:numFmt,type:"numericColumn"},
+      {headerName:"Review Mult",field:"reviewMultiple",width:100,valueFormatter:p=>isFinite(p.value)?p.value.toFixed(1)+"x":"",type:"numericColumn"},
+    ]),
+    G("A+ Content",[
+      {headerName:"Our A+",field:"ourAplus",width:75,valueFormatter:ynFmt},
+      {headerName:"Benchmark A+",field:"benchAplus",width:110,valueFormatter:ynFmt},
+    ]),
+    G("Video",[
+      {headerName:"Our Video",field:"ourVideo",width:85,valueFormatter:ynFmt},
+      {headerName:"Benchmark Video",field:"benchVideo",width:120,valueFormatter:ynFmt},
+    ]),
+    G("Images",[
+      {headerName:"Our Imgs",field:"ourImg",width:80,valueFormatter:numFmt,type:"numericColumn"},
+      {headerName:"Benchmark Imgs",field:"benchImg",width:120,valueFormatter:numFmt,type:"numericColumn"},
+    ]),
+    G("Benchmark Competitor",[
+      {headerName:"Bench ASIN",field:"benchAsin",width:120},
+      {headerName:"Bench Brand",field:"benchBrand",width:120},
+      {headerName:"Strength",field:"benchStrength",width:90,valueFormatter:dec1,type:"numericColumn"},
+    ]),
+    G("Stock",[
+      {headerName:"DRR",field:"drr",width:80,valueFormatter:dec1,type:"numericColumn"},
+      {headerName:"FC",field:"fcStock",width:75,valueFormatter:numFmt,type:"numericColumn"},
+      {headerName:"WH",field:"whStock",width:75,valueFormatter:numFmt,type:"numericColumn"},
+      {headerName:"Total Stock",field:"totalStock",width:100,valueFormatter:numFmt,type:"numericColumn"},
+      {headerName:"Stock Days",field:"stockDays",width:100,valueFormatter:p=>isFinite(p.value)?Number(p.value).toFixed(0):"",type:"numericColumn"},
+      {headerName:"Stock Risk",field:"stockRisk",width:130},
+    ]),
+    G("Recommendation",[
+      {headerName:"Price Action",field:"recAction",width:190,cellRenderer:p=>actPill(p.value)},
+      {headerName:"Test Price",field:"testPrice",width:100,valueFormatter:inrFmt,type:"numericColumn"},
+      {headerName:"Change %",field:"changePct",width:90,valueFormatter:pctFmt,type:"numericColumn"},
+      {headerName:"Primary Problem",field:"primaryProblem",width:170},
+      {headerName:"Primary Action",field:"primaryAction",width:180},
+      {headerName:"Secondary Action",field:"secondaryAction",width:180},
+      {headerName:"Bench Reason",field:"benchReason",width:260,tooltipField:"benchReason"},
+      {headerName:"Recommendation",field:"recReason",width:320,tooltipField:"recReason"},
+      {headerName:"Existing Status",field:"existingStatus",width:130},
+      {headerName:"Existing Priority",field:"existingPriority",width:130},
+    ]),
+    G("Tracking",[
+      {headerName:"Owner",field:"_owner",width:110,editable:true,valueGetter:p=>acts[p.data.ourAsin]?.owner||"",onCellValueChanged:e=>saveAction(e.data.ourAsin,"owner",e.newValue)},
+      {headerName:"Track Status",field:"_status",width:120,editable:true,valueGetter:p=>acts[p.data.ourAsin]?.status||"",onCellValueChanged:e=>saveAction(e.data.ourAsin,"status",e.newValue)},
+      {headerName:"Comments",field:"_comments",width:180,editable:true,valueGetter:p=>acts[p.data.ourAsin]?.comments||"",onCellValueChanged:e=>saveAction(e.data.ourAsin,"comments",e.newValue)},
+      {headerName:"Link",field:"link",width:70,cellRenderer:linkCell},
+    ]),
   ];
 }
+function flattenCols(defs){ const out=[]; defs.forEach(d=>{ if(d.children) out.push(...flattenCols(d.children)); else out.push(d); }); return out; }
 function compColumns(){
+  const G=(headerName,children)=>({headerName,marryChildren:true,children});
   return [
     {headerName:"Our ASIN",field:"ourAsin",width:120,pinned:"left"},
     {headerName:"SKU",field:"ourSku",width:90,pinned:"left"},
     {headerName:"Product",field:"ourDesc",width:190,pinned:"left"},
-    {headerName:"Cat",field:"cat",width:110},
-    {headerName:"SubCat",field:"subcat",width:120},
-    {headerName:"Our Price",field:"ourPrice",width:95,valueFormatter:inrFmt},
-    {headerName:"Our Sales",field:"ourSales",width:95,valueFormatter:numFmt},
-    {headerName:"Our Rank",field:"ourRank",width:95,valueFormatter:numFmt},
-    {headerName:"Comp ASIN",field:"compAsin",width:120},
-    {headerName:"Comp Brand",field:"compBrand",width:120},
-    {headerName:"Comp Price",field:"compPrice",width:100,valueFormatter:inrFmt},
-    {headerName:"Comp Sales",field:"compSales",width:100,valueFormatter:numFmt},
-    {headerName:"Comp Rank",field:"compRank",width:100,valueFormatter:numFmt},
-    {headerName:"Comp Rating",field:"compRating",width:100,valueFormatter:dec1},
-    {headerName:"Comp Reviews",field:"compReviews",width:110,valueFormatter:numFmt},
-    {headerName:"A+",field:"compAplus",width:55,valueFormatter:ynFmt},
-    {headerName:"Video",field:"compVideo",width:60,valueFormatter:ynFmt},
-    {headerName:"Imgs",field:"compImg",width:60,valueFormatter:numFmt},
-    {headerName:"Price Diff",field:"priceDiff",width:95,valueFormatter:inrFmt},
-    {headerName:"Gap %",field:"gapPct",width:85,valueFormatter:pctFmt},
-    {headerName:"Sales Mult",field:"salesMultipleLabel",width:100},
-    {headerName:"Rank Gap",field:"rankGap",width:90,valueFormatter:numFmt},
-    {headerName:"Rating Gap",field:"ratingGap",width:95,valueFormatter:dec1},
-    {headerName:"Review Mult",field:"reviewMultiple",width:100,valueFormatter:p=>isFinite(p.value)?p.value.toFixed(1)+"x":""},
-    {headerName:"Strength",field:"strength",width:90,valueFormatter:dec1},
-    {headerName:"Cheapest",field:"flagCheapest",width:85,valueFormatter:p=>p.value?"✓":""},
-    {headerName:"Top Sell",field:"flagTopSell",width:85,valueFormatter:p=>p.value?"✓":""},
-    {headerName:"Best Rank",field:"flagBestRank",width:85,valueFormatter:p=>p.value?"✓":""},
-    {headerName:"Benchmark",field:"flagBench",width:95,valueFormatter:p=>p.value?"★":"",cellStyle:p=>p.value?{color:"#b45309",fontWeight:"700"}:null},
+    G("Classification",[
+      {headerName:"Category",field:"cat",width:110},
+      {headerName:"Subcategory",field:"subcat",width:120},
+    ]),
+    G("Competitor",[
+      {headerName:"Comp ASIN",field:"compAsin",width:120},
+      {headerName:"Comp Brand",field:"compBrand",width:120},
+      {headerName:"Strength",field:"strength",width:90,valueFormatter:dec1},
+    ]),
+    G("Price",[
+      {headerName:"Our Price",field:"ourPrice",width:95,valueFormatter:inrFmt},
+      {headerName:"Comp Price",field:"compPrice",width:100,valueFormatter:inrFmt},
+      {headerName:"Price Diff",field:"priceDiff",width:95,valueFormatter:inrFmt},
+      {headerName:"Gap %",field:"gapPct",width:85,valueFormatter:pctFmt},
+    ]),
+    G("Monthly Sales",[
+      {headerName:"Our Sales",field:"ourSales",width:95,valueFormatter:numFmt},
+      {headerName:"Comp Sales",field:"compSales",width:100,valueFormatter:numFmt},
+      {headerName:"Sales Mult",field:"salesMultipleLabel",width:100},
+    ]),
+    G("Sales Rank",[
+      {headerName:"Our Rank",field:"ourRank",width:95,valueFormatter:numFmt},
+      {headerName:"Comp Rank",field:"compRank",width:100,valueFormatter:numFmt},
+      {headerName:"Rank Gap",field:"rankGap",width:90,valueFormatter:numFmt},
+    ]),
+    G("Reviews",[
+      {headerName:"Comp Rating",field:"compRating",width:100,valueFormatter:dec1},
+      {headerName:"Rating Gap",field:"ratingGap",width:95,valueFormatter:dec1},
+      {headerName:"Comp Reviews",field:"compReviews",width:110,valueFormatter:numFmt},
+      {headerName:"Review Mult",field:"reviewMultiple",width:100,valueFormatter:p=>isFinite(p.value)?p.value.toFixed(1)+"x":""},
+    ]),
+    G("Content",[
+      {headerName:"A+",field:"compAplus",width:55,valueFormatter:ynFmt},
+      {headerName:"Video",field:"compVideo",width:60,valueFormatter:ynFmt},
+      {headerName:"Imgs",field:"compImg",width:60,valueFormatter:numFmt},
+    ]),
+    G("Flags",[
+      {headerName:"Cheapest",field:"flagCheapest",width:85,valueFormatter:p=>p.value?"✓":""},
+      {headerName:"Top Sell",field:"flagTopSell",width:85,valueFormatter:p=>p.value?"✓":""},
+      {headerName:"Best Rank",field:"flagBestRank",width:85,valueFormatter:p=>p.value?"✓":""},
+      {headerName:"Benchmark",field:"flagBench",width:95,valueFormatter:p=>p.value?"★":"",cellStyle:p=>p.value?{color:"#b45309",fontWeight:"700"}:null},
+    ]),
     {headerName:"Bench Reason",field:"benchReason",width:260,tooltipField:"benchReason"},
     {headerName:"Link",field:"link",width:70,cellRenderer:linkCell},
   ];
@@ -1090,10 +1136,10 @@ function exportRows(rows, cols, name){
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,name.slice(0,28));
   XLSX.writeFile(wb,name+".xlsx");
 }
-document.getElementById("btnExportMain").onclick=()=>exportRows(filteredAsins(),mainColumns().filter(c=>!c.field.startsWith("_")),"Main_Action_Table");
+document.getElementById("btnExportMain").onclick=()=>exportRows(filteredAsins(),flattenCols(mainColumns()).filter(c=>!c.field.startsWith("_")),"Main_Action_Table");
 document.getElementById("btnExportComp").onclick=()=>{
   const set=new Set(filteredAsins().map(a=>a.ourAsin));
-  exportRows(MODEL.comp.filter(c=>set.has(c.ourAsin)),compColumns(),"All_Competitor_Comparison");
+  exportRows(MODEL.comp.filter(c=>set.has(c.ourAsin)),flattenCols(compColumns()),"All_Competitor_Comparison");
 };
 document.getElementById("btnCopyRecos").onclick=()=>navigator.clipboard.writeText(filteredAsins().map(recoText).join("\n\n"));
 document.getElementById("btnCopyAsins").onclick=()=>navigator.clipboard.writeText(filteredAsins().map(a=>a.ourAsin).join("\n"));
