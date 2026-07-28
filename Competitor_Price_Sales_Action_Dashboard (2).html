@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Competitor Price &amp; Action Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.4/dist/ag-grid-community.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{ --bg:#0f172a; }
+  body{ background:#f1f5f9; font-family:'Inter',ui-sans-serif,system-ui,sans-serif; color:#0f172a; }
+  .kpi{ cursor:pointer; transition:.12s; border:1px solid #e2e8f0; }
+  .kpi:hover{ transform:translateY(-2px); box-shadow:0 6px 16px rgba(2,6,23,.08); }
+  .kpi.active{ outline:2px solid #2563eb; outline-offset:-2px; }
+  .tab{ cursor:pointer; }
+  .tab.active{ background:#1e293b; color:#fff; }
+  .ag-theme-quartz{ --ag-font-size:12px; --ag-header-background-color:#1e293b; --ag-header-foreground-color:#fff; --ag-row-height:34px; --ag-header-height:40px; }
+  .badge{ padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:600; display:inline-block; white-space:nowrap; }
+  .pill-Critical{background:#fee2e2;color:#b91c1c}
+  .pill-High{background:#ffedd5;color:#c2410c}
+  .pill-Medium{background:#fef9c3;color:#a16207}
+  .pill-Normal{background:#dcfce7;color:#15803d}
+  .act-Reduce{background:#fee2e2;color:#b91c1c}
+  .act-Match{background:#e0e7ff;color:#3730a3}
+  .act-Maintain{background:#dcfce7;color:#15803d}
+  .act-Increase{background:#cffafe;color:#0e7490}
+  .act-Notprice{background:#f3e8ff;color:#7e22ce}
+  .act-Lowstock{background:#fef3c7;color:#92400e}
+  .act-Content{background:#dbeafe;color:#1d4ed8}
+  .act-Missing{background:#e5e7eb;color:#374151}
+  ::-webkit-scrollbar{height:9px;width:9px}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:6px}
+</style>
+</head>
+<body class="text-sm">
+<!-- Header -->
+<header class="bg-slate-900 text-white sticky top-0 z-40 shadow">
+  <div class="px-4 py-2.5 flex flex-wrap items-center gap-3">
+    <div class="font-bold text-base tracking-tight">Competitor Price &amp; Action Dashboard</div>
+    <span id="connState" class="badge bg-slate-700 text-slate-200">Connecting…</span>
+    <div class="ml-auto flex items-center gap-2 text-xs">
+      <span id="lastRefresh" class="text-slate-300"></span>
+      <button id="btnRefresh" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded font-medium">↻ Refresh</button>
+      <label class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded font-medium cursor-pointer">
+        Upload CSV/XLSX<input id="fileInput" type="file" accept=".csv,.xlsx,.xls" class="hidden">
+      </label>
+      <button id="btnClearFilters" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded font-medium">Clear filters</button>
+    </div>
+  </div>
+</header>
+
+<div id="loading" class="hidden fixed inset-0 bg-white/70 z-50 flex items-center justify-center">
+  <div class="text-center"><div class="animate-spin h-10 w-10 border-4 border-blue-600 border-t-transparent rounded-full mx-auto"></div>
+  <div id="loadingMsg" class="mt-3 text-slate-600 font-medium">Loading live data…</div></div>
+</div>
+<div id="errBar" class="hidden bg-red-600 text-white px-4 py-2 text-sm"></div>
+
+<main class="p-4 space-y-4 max-w-[1900px] mx-auto">
+
+  <!-- KPI cards -->
+  <section>
+    <div id="kpiGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2"></div>
+  </section>
+
+  <!-- Filters -->
+  <section class="bg-white rounded-lg border border-slate-200 p-3 sticky top-[46px] z-30">
+    <div class="flex items-center justify-between mb-2">
+      <div class="font-semibold text-slate-700">Filters</div>
+      <div id="activeFilterSummary" class="text-xs text-slate-500"></div>
+    </div>
+    <div id="filterGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-xs"></div>
+  </section>
+
+  <!-- Charts -->
+  <section class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+    <div class="bg-white rounded-lg border border-slate-200 p-2"><div id="chartPrice" style="height:340px"></div></div>
+    <div class="bg-white rounded-lg border border-slate-200 p-2"><div id="chartSales" style="height:340px"></div></div>
+    <div class="bg-white rounded-lg border border-slate-200 p-2"><div id="chartRank" style="height:340px"></div></div>
+    <div class="bg-white rounded-lg border border-slate-200 p-2"><div id="chartScatter1" style="height:340px"></div></div>
+    <div class="bg-white rounded-lg border border-slate-200 p-2"><div id="chartScatter2" style="height:340px"></div></div>
+    <div class="bg-white rounded-lg border border-slate-200 p-2"><div id="chartBrand" style="height:340px"></div></div>
+    <div class="bg-white rounded-lg border border-slate-200 p-2 lg:col-span-2"><div id="chartAction" style="height:300px"></div></div>
+  </section>
+
+  <!-- Action view tabs + main table -->
+  <section class="bg-white rounded-lg border border-slate-200 p-3">
+    <div class="flex flex-wrap items-center gap-2 mb-2">
+      <div class="font-semibold text-slate-700 mr-2">Main ASIN Action Table</div>
+      <div id="viewTabs" class="flex flex-wrap gap-1 text-xs"></div>
+      <div class="ml-auto flex gap-2">
+        <input id="mainSearch" placeholder="Search…" class="border rounded px-2 py-1 text-xs">
+        <button id="btnExportMain" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-medium">Export Excel</button>
+        <button id="btnCopyRecos" class="bg-slate-700 text-white px-3 py-1 rounded text-xs font-medium">Copy recommendations</button>
+        <button id="btnCopyAsins" class="bg-slate-700 text-white px-3 py-1 rounded text-xs font-medium">Copy ASINs</button>
+      </div>
+    </div>
+    <div id="mainGrid" class="ag-theme-quartz" style="height:520px;width:100%"></div>
+  </section>
+
+  <!-- Recommendation panel -->
+  <section id="recoPanel" class="bg-white rounded-lg border border-slate-200 p-3 hidden">
+    <div class="flex items-center justify-between mb-1">
+      <div class="font-semibold text-slate-700">Recommendation — <span id="recoAsin"></span></div>
+      <button id="btnCopyReco" class="bg-slate-700 text-white px-3 py-1 rounded text-xs">Copy</button>
+    </div>
+    <div id="recoBody" class="text-sm text-slate-700 leading-relaxed"></div>
+  </section>
+
+  <!-- All competitor table -->
+  <section class="bg-white rounded-lg border border-slate-200 p-3">
+    <div class="flex flex-wrap items-center gap-2 mb-2">
+      <div class="font-semibold text-slate-700">All Competitor Comparison</div>
+      <div class="ml-auto flex gap-2">
+        <input id="compSearch" placeholder="Search…" class="border rounded px-2 py-1 text-xs">
+        <button id="btnExportComp" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-medium">Export Excel</button>
+      </div>
+    </div>
+    <div id="compGrid" class="ag-theme-quartz" style="height:480px;width:100%"></div>
+  </section>
+</main>
+
+<script>/* ================= Competitor Dashboard Engine =================
+   Pure logic: rows (array of arrays) -> model. No DOM.
+   Column mapping is by INDEX (gviz preserves sheet order) because
+   several headers are duplicated in the source sheet.
+================================================================= */
+(function (root) {
+  "use strict";
+
+  // 0-based column indices (A..AO)
+  var COL = {
+    compAsin:0, link:1, compPriceC:2, compBrand:3, compSalesE:4,
+    ourAsin:5, ourDescG:6, ourSkuH:7, ourSalesI:8, ourPriceJ:9,
+    checkPrice:10, diff:11, gapPct:12, pricePos:13, priorities:14,
+    status:15, asp:16, descR:17, skuS:18, cat:19, subcat:20,
+    drr:21, fcStock:22, whStock:23, stockDays:24, compSalesZ:25,
+    compRating:26, compReviews:27, compRank:28, compPriceAD:29,
+    compAplus:30, compVideo:31, compImg:32, ourSalesAH:33,
+    ourRating:34, ourReviews:35, ourRank:36, ourPriceAL:37,
+    ourAplus:38, ourVideo:39, ourImg:40
+  };
+
+  function num(v) {
+    if (v === null || v === undefined) return NaN;
+    if (typeof v === "number") return isFinite(v) ? v : NaN;
+    var s = String(v).replace(/[₹,\s]/g, "").trim();
+    if (s === "") return NaN;
+    var n = parseFloat(s);
+    return isFinite(n) ? n : NaN;
+  }
+  function pos(v) { var n = num(v); return isFinite(n) && n > 0 ? n : NaN; }
+  function yesNo(v) {
+    if (v === null || v === undefined) return false;
+    var s = String(v).trim().toLowerCase();
+    return s === "yes" || s === "true" || s === "1" || s === "y";
+  }
+  function txt(v) { return v === null || v === undefined ? "" : String(v).trim(); }
+  function firstNum() { for (var i=0;i<arguments.length;i++){var n=num(arguments[i]); if(isFinite(n)) return n;} return NaN; }
+  function firstPos() { for (var i=0;i<arguments.length;i++){var n=pos(arguments[i]); if(isFinite(n)) return n;} return NaN; }
+  function firstTxt() { for (var i=0;i<arguments.length;i++){var t=txt(arguments[i]); if(t) return t;} return ""; }
+
+  function stockRisk(sd) {
+    if (!isFinite(sd)) return "Unknown";
+    if (sd < 7) return "Critical Low Stock";
+    if (sd < 16) return "Low Stock";       // 7-15
+    if (sd <= 30) return "Controlled Stock";
+    if (sd <= 60) return "Healthy Stock";
+    if (sd <= 120) return "High Stock";
+    return "Excess Stock";
+  }
+
+  // psychological price ending in 9 / nearest anchor
+  var ANCHORS = [199,249,299,349,399,449,499,599,699,799,899,999];
+  function roundNice(p) {
+    if (!isFinite(p) || p <= 0) return NaN;
+    var best = null, bd = Infinity;
+    for (var i=0;i<ANCHORS.length;i++){ var d=Math.abs(ANCHORS[i]-p); if(d<bd){bd=d;best=ANCHORS[i];} }
+    if (best !== null && bd <= 20) return best;
+    // nearest integer ending in 9
+    var r = Math.round((p + 1) / 10) * 10 - 1;
+    if (r < 9) r = Math.max(9, Math.round(p));
+    return r;
+  }
+
+  // ---- Parse a raw sheet row into a normalized competitor mapping ----
+  function parseRow(r) {
+    var ourAsin = txt(r[COL.ourAsin]);
+    var compAsin = txt(r[COL.compAsin]);
+    var compPrice = firstPos(r[COL.compPriceC], r[COL.compPriceAD]);
+    var ourPrice  = firstPos(r[COL.ourPriceJ], r[COL.ourPriceAL]);
+    var compSales = firstNum(r[COL.compSalesZ], r[COL.compSalesE]);
+    var ourSales  = firstNum(r[COL.ourSalesAH], r[COL.ourSalesI]);
+    var ourDesc   = firstTxt(r[COL.ourDescG], r[COL.descR]);
+    var ourSku    = firstTxt(r[COL.ourSkuH], r[COL.skuS]);
+
+    var fc = num(r[COL.fcStock]), wh = num(r[COL.whStock]);
+    var totalStock = (isFinite(fc)?fc:0) + (isFinite(wh)?wh:0);
+    var sd = num(r[COL.stockDays]);
+    var drr = num(r[COL.drr]);
+
+    var compRating = num(r[COL.compRating]);
+    var compReviews = num(r[COL.compReviews]);
+    var compRank = num(r[COL.compRank]);
+    var ourRating = num(r[COL.ourRating]);
+    var ourReviews = num(r[COL.ourReviews]);
+    var ourRank = num(r[COL.ourRank]);
+
+    var compAplus = yesNo(r[COL.compAplus]), compVideo = yesNo(r[COL.compVideo]);
+    var compImg = num(r[COL.compImg]);
+    var ourAplus = yesNo(r[COL.ourAplus]), ourVideo = yesNo(r[COL.ourVideo]);
+    var ourImg = num(r[COL.ourImg]);
+
+    var priceDiff = (isFinite(ourPrice)&&isFinite(compPrice)) ? ourPrice - compPrice : NaN;
+    var gapPct = (isFinite(ourPrice)&&isFinite(compPrice)&&compPrice>0) ? ((ourPrice-compPrice)/compPrice)*100 : NaN;
+    var salesAdv = (isFinite(compSales)&&isFinite(ourSales)) ? compSales - ourSales : NaN;
+    var salesMultiple = (isFinite(compSales)&&isFinite(ourSales)&&ourSales>0) ? compSales/ourSales : NaN;
+    var rankGap = (isFinite(ourRank)&&isFinite(compRank)) ? ourRank - compRank : NaN; // + => comp better
+    var ratingGap = (isFinite(compRating)&&isFinite(ourRating)) ? compRating - ourRating : NaN;
+    var reviewMultiple = (isFinite(compReviews)&&isFinite(ourReviews)&&ourReviews>0) ? compReviews/ourReviews : NaN;
+
+    var contentGap = 0;
+    if (compAplus && !ourAplus) contentGap++;
+    if (compVideo && !ourVideo) contentGap++;
+    if (isFinite(compImg)&&isFinite(ourImg)&&compImg>ourImg) contentGap++;
+
+    var insufficient = !isFinite(compSales)&&!isFinite(compRank)&&!isFinite(compRating)&&!isFinite(compReviews);
+    var dataMissing = !ourAsin || !compAsin || !isFinite(ourPrice) || !isFinite(compPrice);
+
+    return {
+      ourAsin: ourAsin, compAsin: compAsin, link: txt(r[COL.link]),
+      compBrand: txt(r[COL.compBrand]) || "Unknown",
+      ourDesc: ourDesc, ourSku: ourSku,
+      cat: txt(r[COL.cat]), subcat: txt(r[COL.subcat]),
+      asp: txt(r[COL.asp]), pricePos: txt(r[COL.pricePos]),
+      checkPrice: txt(r[COL.checkPrice]),
+      existingPriority: txt(r[COL.priorities]) || "",
+      existingStatus: txt(r[COL.status]) || "",
+      compPrice: compPrice, ourPrice: ourPrice,
+      compSales: compSales, ourSales: ourSales,
+      compRating: compRating, compReviews: compReviews, compRank: compRank,
+      ourRating: ourRating, ourReviews: ourReviews, ourRank: ourRank,
+      compAplus: compAplus, compVideo: compVideo, compImg: compImg,
+      ourAplus: ourAplus, ourVideo: ourVideo, ourImg: ourImg,
+      drr: drr, fcStock: fc, whStock: wh, totalStock: totalStock,
+      stockDays: sd, stockRisk: stockRisk(sd),
+      priceDiff: priceDiff, gapPct: gapPct, salesAdv: salesAdv,
+      salesMultiple: salesMultiple, salesMultipleLabel: (isFinite(salesMultiple)?salesMultiple.toFixed(2)+"x":(ourSales===0||(!isFinite(ourSales))?"New/No Sales":"—")),
+      rankGap: rankGap, ratingGap: ratingGap, reviewMultiple: reviewMultiple,
+      contentGap: contentGap,
+      insufficient: insufficient, dataMissing: dataMissing,
+      strength: 0
+    };
+  }
+
+  // minmax helper -> 0..1, fallback 0.5 when flat, NaN->0
+  function scale(val, min, max) {
+    if (!isFinite(val)) return 0;
+    if (max === min) return 0.5;
+    return (val - min) / (max - min);
+  }
+
+  function computeStrength(group) {
+    // arrays of finite values
+    function vals(f, t) { var a=[]; group.forEach(function(g){var v=f(g); if(isFinite(v)) a.push(t?t(v):v);}); return a; }
+    var salesA = vals(function(g){return g.compSales;});
+    var rankA  = vals(function(g){return g.compRank;});
+    var revA   = vals(function(g){return g.compReviews;}, function(v){return Math.log(1+v);});
+    var ratA   = vals(function(g){return g.compRating;});
+    var priceA = vals(function(g){return g.compPrice;});
+    var imgA   = vals(function(g){return g.compImg;});
+    function mm(a){ return a.length?{min:Math.min.apply(null,a),max:Math.max.apply(null,a)}:{min:0,max:0}; }
+    var mS=mm(salesA), mR=mm(rankA), mV=mm(revA), mRt=mm(ratA), mP=mm(priceA), mI=mm(imgA);
+
+    group.forEach(function(g){
+      var s=0;
+      s += 30 * scale(g.compSales, mS.min, mS.max);
+      // lower rank better -> invert
+      s += 20 * (isFinite(g.compRank) ? (mR.max===mR.min?0.5:(mR.max-g.compRank)/(mR.max-mR.min)) : 0);
+      s += 15 * scale(isFinite(g.compReviews)?Math.log(1+g.compReviews):NaN, mV.min, mV.max);
+      s += 10 * scale(g.compRating, mRt.min, mRt.max);
+      // lower price more competitive -> invert
+      s += 10 * (isFinite(g.compPrice) ? (mP.max===mP.min?0.5:(mP.max-g.compPrice)/(mP.max-mP.min)) : 0);
+      s += 5  * (g.compAplus?1:0);
+      s += 5  * (g.compVideo?1:0);
+      s += 5  * scale(g.compImg, mI.min, mI.max);
+      g.strength = Math.round(s*10)/10;
+    });
+  }
+
+  function pickExtreme(group, f, dir) { // dir 1 = max, -1 = min
+    var best=null;
+    group.forEach(function(g){ var v=f(g); if(!isFinite(v)) return;
+      if(best===null || (dir>0?v>f(best):v<f(best))) best=g; });
+    return best;
+  }
+
+  function selectBenchmark(group) {
+    var cand = group.filter(function(g){
+      return g.compAsin && isFinite(g.compPrice) && !g.insufficient && g.compAsin !== g.ourAsin;
+    });
+    if (!cand.length) return null;
+    cand.sort(function(a,b){
+      if (b.strength !== a.strength) return b.strength - a.strength;
+      var as=isFinite(a.compSales)?a.compSales:-1, bs=isFinite(b.compSales)?b.compSales:-1;
+      if (bs !== as) return bs - as;
+      var ar=isFinite(a.compRank)?a.compRank:Infinity, br=isFinite(b.compRank)?b.compRank:Infinity;
+      if (ar !== br) return ar - br;
+      var arv=isFinite(a.compReviews)?a.compReviews:-1, brv=isFinite(b.compReviews)?b.compReviews:-1;
+      if (brv !== arv) return brv - arv;
+      var op = a.ourPrice;
+      return Math.abs((a.compPrice||0)-op) - Math.abs((b.compPrice||0)-op);
+    });
+    return cand[0];
+  }
+
+  function decidePriceAction(a, bench) {
+    // a = per-ASIN summary object with our metrics; bench = chosen comp row
+    var sd = a.stockDays;
+    var our = a.ourPrice, bp = bench ? bench.compPrice : NaN;
+    var gap = (isFinite(our)&&isFinite(bp)&&bp>0) ? ((our-bp)/bp)*100 : NaN;
+    var compSalesHigher = bench && isFinite(bench.compSales) && isFinite(a.ourSales) && bench.compSales > a.ourSales;
+    var compRankBetter  = bench && isFinite(bench.compRank) && isFinite(a.ourRank) && bench.compRank < a.ourRank;
+
+    var res = { action:"Maintain Price", testPrice: our, changePct: 0, reason:"" };
+
+    // 1. Critical stock overrides reductions
+    if (isFinite(sd) && sd < 15) {
+      var tp = our, chg = 0;
+      if (sd < 7 && isFinite(our)) { tp = roundNice(our*1.04); chg = isFinite(our)&&our>0?((tp-our)/our)*100:0; }
+      res.action = "Low Stock - Do Not Reduce";
+      res.testPrice = tp; res.changePct = chg;
+      res.reason = "Do not reduce the price because stock cover is "+(isFinite(sd)?sd.toFixed(0):"?")+" days (below 15). Maintain the current price and replenish FC stock. Consider reducing advertising until stock availability improves"+(sd<7?"; a small 3–5% increase is reasonable while stock is very tight.":".");
+      return res;
+    }
+
+    // 6. Price is not the problem (checked before reductions where our<=bench)
+    if (bench && isFinite(our) && isFinite(bp) && our <= bp && compSalesHigher && compRankBetter) {
+      res.action = "Price Is Not the Problem";
+      res.testPrice = our; res.changePct = 0;
+      var probs = [];
+      if (isFinite(bench.compRating) && isFinite(a.ourRating) && bench.compRating - a.ourRating >= 0.3) probs.push("rating gap");
+      if (isFinite(bench.compReviews) && isFinite(a.ourReviews) && bench.compReviews >= a.ourReviews*3) probs.push("review authority");
+      if (bench.compAplus && !a.ourAplus) probs.push("missing A+");
+      if (bench.compVideo && !a.ourVideo) probs.push("missing video");
+      if (isFinite(bench.compImg)&&isFinite(a.ourImg)&&bench.compImg>a.ourImg) probs.push("lower image count");
+      if (isFinite(a.fcStock) && a.fcStock <= 0) probs.push("low FC stock");
+      res.reason = "Maintain the current price — the product is already priced at or below the strongest competitor. The real gaps are "+(probs.length?probs.join(", "):"sales and rank")+". Fix listing content and demand drivers rather than cutting price further.";
+      return res;
+    }
+
+    // 5. Increase
+    var ourRankBetterEq = bench && isFinite(a.ourRank) && isFinite(bench.compRank) && a.ourRank <= bench.compRank;
+    var salesHealthy = isFinite(a.ourSales) && a.ourSales > 0;
+    if (bench && isFinite(gap) && gap < -10 && ourRankBetterEq && salesHealthy && isFinite(sd) && sd < 20) {
+      var tpI = roundNice(our*1.03);
+      if (isFinite(bp)) tpI = Math.min(tpI, bp); // don't exceed benchmark on first test
+      res.action = "Increase Price";
+      res.testPrice = tpI; res.changePct = isFinite(our)&&our>0?((tpI-our)/our)*100:0;
+      res.reason = "Raise the price as a test from ₹"+fmt(our)+" to ₹"+fmt(tpI)+". We sit "+Math.abs(gap).toFixed(0)+"% below "+bench.compBrand+" while matching or beating its sales rank, and stock is tight ("+sd.toFixed(0)+" days). Capture margin without exceeding the benchmark on the first move.";
+      return res;
+    }
+
+    // 2/3 need stockDays>30 and competitor stronger and our>bench
+    var overBench = isFinite(gap) && gap > 5;
+    if (bench && overBench && compSalesHigher && compRankBetter && isFinite(sd) && sd > 30) {
+      if (gap <= 5) { /* not here */ }
+      // Match when within 5% above (handled below); here gap>5 => reduction
+      var pct = 0.97;
+      if (sd > 120) pct = 0.92; else if (sd > 60) pct = 0.95; else pct = 0.97;
+      var calc = our * pct;
+      var staged = isFinite(bp) && our > 0 && bp < our*0.8; // comp >20% below our
+      var target = isFinite(bp) ? Math.max(calc, bp) : calc;
+      if (staged) target = Math.max(calc, our*0.9); // staged, don't match immediately
+      var tpR = roundNice(target);
+      res.action = "Reduce Price";
+      res.testPrice = tpR; res.changePct = isFinite(our)&&our>0?((tpR-our)/our)*100:0;
+      res.reason = "Reduce the price from ₹"+fmt(our)+" to ₹"+fmt(tpR)+" as a controlled test. "+bench.compBrand+" is the selected benchmark because its sales, rank and review authority are stronger. "+(staged?"The competitor is priced well below us, so apply a staged reduction rather than matching immediately. ":"")+"Stock cover is "+(isFinite(sd)?sd.toFixed(0):"?")+" days, so a "+((1-pct)*100).toFixed(0)+"% test reduction is justified.";
+      return res;
+    }
+    // 3. Match: within 5% above benchmark, competitor stronger, stock>30
+    if (bench && isFinite(gap) && gap > 0 && gap <= 5 && (compSalesHigher||compRankBetter) && isFinite(sd) && sd > 30) {
+      var tpM = roundNice(bp);
+      res.action = "Match Competitor";
+      res.testPrice = tpM; res.changePct = isFinite(our)&&our>0?((tpM-our)/our)*100:0;
+      res.reason = "Match "+bench.compBrand+" at ₹"+fmt(tpM)+". We are only "+gap.toFixed(1)+"% above a stronger competitor and stock cover ("+sd.toFixed(0)+" days) supports the move.";
+      return res;
+    }
+
+    // 4. Maintain (default)
+    res.action = "Maintain Price";
+    res.testPrice = our; res.changePct = 0;
+    res.reason = bench
+      ? "Maintain the current price. Our price is competitive versus "+bench.compBrand+" and the competitor's supporting data does not justify a change. Focus on stock and content."
+      : "Maintain the current price. No credible competitor benchmark is available for this ASIN.";
+    return res;
+  }
+
+  function fmt(n){ return isFinite(n)?Math.round(n).toLocaleString("en-IN"):"—"; }
+
+  function primaryProblem(a, bench) {
+    if (isFinite(a.stockDays) && a.stockDays < 7) return "Critical Low Stock";
+    if (!isFinite(a.ourPrice)) return "Missing or Invalid Price";
+    if (bench && isFinite(a.gapPct) && a.gapPct > 5 && isFinite(bench.compSales) && isFinite(a.ourSales) && bench.compSales > a.ourSales) return "Competitor Price Advantage";
+    if (bench && isFinite(bench.compRank) && isFinite(a.ourRank) && bench.compRank < a.ourRank*0.6) return "Weak Sales Rank";
+    if (bench && isFinite(bench.compSales) && isFinite(a.ourSales) && bench.compSales >= a.ourSales*3) return "Weak Monthly Sales";
+    if (isFinite(a.ourRating) && a.ourRating < 4.0) return "Rating Gap";
+    if (bench && isFinite(bench.compReviews) && isFinite(a.ourReviews) && bench.compReviews >= a.ourReviews*3) return "Review Strength Gap";
+    if (bench && bench.compAplus && !a.ourAplus) return "Missing A+ Content";
+    if (bench && bench.compVideo && !a.ourVideo) return "Missing Video";
+    if (bench && isFinite(bench.compImg) && isFinite(a.ourImg) && bench.compImg >= a.ourImg+2) return "Weak Image Count";
+    if (isFinite(a.stockDays) && a.stockDays > 90) return "Excess Stock";
+    return "No Major Issue";
+  }
+
+  // normalize existing priority (col O) into tier for coloring
+  function priorityTier(existing, a, bench, action) {
+    var e = (existing||"").toLowerCase();
+    if (e.indexOf("critical")>=0) return "Critical";
+    if (e.indexOf("high")>=0) return "High";
+    if (e.indexOf("medium")>=0) return "Medium";
+    if (e.indexOf("margin")>=0) return "Medium";
+    if (e === "normal") return "Normal";
+    if (e.indexOf("fix")>=0 || e.indexOf("inactive")>=0) return "High";
+    // compute
+    var sd=a.stockDays, gap=a.gapPct;
+    if ((isFinite(sd)&&sd<7)||!isFinite(a.ourPrice)||(isFinite(a.fcStock)&&a.fcStock<=0&&isFinite(a.drr)&&a.drr>0)||(bench&&isFinite(gap)&&gap>20)||(isFinite(sd)&&sd>180&&isFinite(a.ourSales)&&a.ourSales<1)) return "Critical";
+    if ((isFinite(sd)&&sd>=7&&sd<16)||(bench&&isFinite(gap)&&gap>=10&&gap<=20)||(bench&&isFinite(bench.compSales)&&isFinite(a.ourSales)&&bench.compSales>=a.ourSales*3)||(isFinite(a.ourRating)&&a.ourRating<4.0)) return "High";
+    if ((bench&&isFinite(gap)&&gap>=5&&gap<10)||(bench&&bench.compAplus&&!a.ourAplus)||(bench&&bench.compVideo&&!a.ourVideo)||(bench&&isFinite(bench.compImg)&&isFinite(a.ourImg)&&bench.compImg>=a.ourImg+2)||(isFinite(sd)&&sd>60&&sd<=120)) return "Medium";
+    return "Normal";
+  }
+
+  function nonPriceActions(a, bench) {
+    var list = [];
+    if (bench && bench.compAplus && !a.ourAplus) list.push("Create A+ Content");
+    if (bench && bench.compVideo && !a.ourVideo) list.push("Add Product Video");
+    if (bench && isFinite(bench.compImg) && isFinite(a.ourImg) && bench.compImg >= a.ourImg+2) list.push("Improve Listing Images");
+    if ((isFinite(a.ourRating)&&a.ourRating<4.0) || (bench&&isFinite(bench.compRating)&&isFinite(a.ourRating)&&bench.compRating-a.ourRating>=0.3)) list.push("Investigate Product Experience");
+    if (bench && isFinite(bench.compReviews) && isFinite(a.ourReviews) && bench.compReviews >= a.ourReviews*3) list.push("Build Review Strength");
+    if ((!isFinite(a.fcStock)||a.fcStock<=0) && isFinite(a.whStock) && a.whStock>0) list.push("Move Warehouse Stock to FC");
+    if (isFinite(a.stockDays) && a.stockDays < 15 && isFinite(a.drr) && a.drr > 0) list.push("Replenish FC Stock");
+    if (isFinite(a.stockDays) && a.stockDays > 90) list.push("Accelerate Sales");
+    return list;
+  }
+
+  function benchReason(a, bench, group) {
+    if (!bench) return "No credible competitor benchmark (missing price or insufficient data).";
+    var cheapest = pickExtreme(group.filter(function(g){return isFinite(g.compPrice);}), function(g){return g.compPrice;}, -1);
+    var parts = [];
+    if (isFinite(bench.compSales)) parts.push("monthly sales of "+fmt(bench.compSales));
+    if (isFinite(bench.compRank)) parts.push("sales rank "+fmt(bench.compRank));
+    if (isFinite(bench.compReviews)) parts.push(fmt(bench.compReviews)+" reviews");
+    var base = bench.compBrand+" ("+bench.compAsin+") is selected because it has the strongest overall profile — "+parts.join(", ")+" (strength score "+bench.strength+").";
+    if (cheapest && cheapest.compAsin !== bench.compAsin) base += " It is a more credible benchmark than the cheapest competitor "+cheapest.compBrand+" at ₹"+fmt(cheapest.compPrice)+".";
+    return base;
+  }
+
+  function build(rows) {
+    // rows: array of arrays (no header). Filter blanks.
+    var comp = [];
+    rows.forEach(function(r){
+      if (!r) return;
+      var oa = txt(r[COL.ourAsin]), ca = txt(r[COL.compAsin]);
+      if (!oa && !ca) return; // blank
+      comp.push(parseRow(r));
+    });
+
+    // group by Our ASIN
+    var groups = {};
+    comp.forEach(function(c){ (groups[c.ourAsin] = groups[c.ourAsin] || []).push(c); });
+
+    // strength per group + flags
+    Object.keys(groups).forEach(function(k){
+      var g = groups[k];
+      computeStrength(g);
+      var cheapest = pickExtreme(g.filter(function(x){return isFinite(x.compPrice);}), function(x){return x.compPrice;}, -1);
+      var topSell  = pickExtreme(g, function(x){return x.compSales;}, 1);
+      var bestRank = pickExtreme(g.filter(function(x){return isFinite(x.compRank);}), function(x){return x.compRank;}, -1);
+      var topRated = pickExtreme(g, function(x){return x.compRating;}, 1);
+      var topRev   = pickExtreme(g, function(x){return x.compReviews;}, 1);
+      var topScore = pickExtreme(g, function(x){return x.strength;}, 1);
+      var bench = selectBenchmark(g);
+      g.forEach(function(x){
+        x.flagCheapest = cheapest && x===cheapest;
+        x.flagTopSell  = topSell && x===topSell;
+        x.flagBestRank = bestRank && x===bestRank;
+        x.flagBench    = bench && x===bench;
+        x.benchReason  = "";
+      });
+      g._bench = bench;
+      g._cheapest = cheapest; g._topSell = topSell; g._bestRank = bestRank;
+      g._topRated = topRated; g._topRev = topRev; g._topScore = topScore;
+    });
+
+    // per-ASIN summary rows
+    var asins = [];
+    Object.keys(groups).forEach(function(k){
+      var g = groups[k];
+      var f = g[0]; // shared "our" fields identical across group
+      var bench = g._bench;
+      var a = {
+        ourAsin: k, ourSku: f.ourSku, ourDesc: f.ourDesc, cat: f.cat, subcat: f.subcat,
+        ourPrice: f.ourPrice, ourSales: f.ourSales, ourRank: f.ourRank,
+        ourRating: f.ourRating, ourReviews: f.ourReviews,
+        ourAplus: f.ourAplus, ourVideo: f.ourVideo, ourImg: f.ourImg,
+        drr: f.drr, fcStock: f.fcStock, whStock: f.whStock, totalStock: f.totalStock,
+        stockDays: f.stockDays, stockRisk: f.stockRisk, asp: f.asp, pricePos: f.pricePos,
+        checkPrice: f.checkPrice, existingPriority: f.existingPriority, existingStatus: f.existingStatus,
+        link: bench ? bench.link : f.link, compCount: g.length
+      };
+      a.gapPct = bench && isFinite(a.ourPrice)&&isFinite(bench.compPrice)&&bench.compPrice>0 ? ((a.ourPrice-bench.compPrice)/bench.compPrice)*100 : NaN;
+
+      var dec = decidePriceAction(a, bench);
+      var pt = priorityTier(a.existingPriority, a, bench, dec.action);
+      var pp = primaryProblem(a, bench);
+      var npa = nonPriceActions(a, bench);
+
+      a.priorityTier = pt;
+      a.recAction = dec.action;
+      a.testPrice = dec.testPrice;
+      a.changePct = dec.changePct;
+      a.primaryProblem = pp;
+      a.primaryAction = dec.action === "Reduce Price" || dec.action === "Match Competitor" || dec.action === "Increase Price" || dec.action === "Low Stock - Do Not Reduce" ? dec.action : (npa[0] || dec.action);
+      a.secondaryAction = npa.filter(function(x){return x!==a.primaryAction;})[0] || (npa[0] && npa[0]===a.primaryAction ? (npa[1]||"—") : (npa[0]||"—"));
+      a.recReason = dec.reason;
+      a.nonPriceActions = npa;
+
+      if (bench) {
+        a.benchAsin = bench.compAsin; a.benchBrand = bench.compBrand;
+        a.benchPrice = bench.compPrice; a.benchSales = bench.compSales;
+        a.benchRank = bench.compRank; a.benchRating = bench.compRating;
+        a.benchReviews = bench.compReviews; a.benchAplus = bench.compAplus;
+        a.benchVideo = bench.compVideo; a.benchImg = bench.compImg;
+        a.benchStrength = bench.strength;
+        a.priceDiff = bench.priceDiff; a.salesMultiple = bench.salesMultiple;
+        a.salesMultipleLabel = bench.salesMultipleLabel;
+        a.rankGap = bench.rankGap; a.ratingGap = bench.ratingGap; a.reviewMultiple = bench.reviewMultiple;
+        a.benchReason = benchReason(a, bench, g);
+        bench.benchReason = a.benchReason;
+      } else {
+        a.benchAsin=""; a.benchBrand=""; a.benchPrice=NaN; a.benchSales=NaN; a.benchRank=NaN;
+        a.benchRating=NaN; a.benchReviews=NaN; a.benchAplus=false; a.benchVideo=false; a.benchImg=NaN;
+        a.benchStrength=NaN; a.priceDiff=NaN; a.salesMultiple=NaN; a.salesMultipleLabel="—";
+        a.rankGap=NaN; a.ratingGap=NaN; a.reviewMultiple=NaN;
+        a.benchReason = benchReason(a, null, g);
+      }
+      a.dataMissing = !k || !isFinite(a.ourPrice) || !bench;
+      a.competitors = g;
+      asins.push(a);
+    });
+
+    // sort asins by priority severity then change magnitude
+    var order = { "Critical":0, "High":1, "Medium":2, "Normal":3 };
+    asins.sort(function(x,y){
+      var d = (order[x.priorityTier]||9) - (order[y.priorityTier]||9);
+      if (d) return d;
+      return Math.abs(y.changePct||0) - Math.abs(x.changePct||0);
+    });
+
+    return { comp: comp, asins: asins, groups: groups };
+  }
+
+  var api = { build: build, COL: COL, roundNice: roundNice, stockRisk: stockRisk, _fmt: fmt };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  root.CompEngine = api;
+})(typeof window !== "undefined" ? window : this);
+</script>
+<script>/* ================= App / UI ================= */
+const SHEET_ID = "1G3yymW9VMGk8kasYQ0OTvYFUOLifhNmDcjTQ9nEec5I";
+const TAB = "Competitor";
+const GVIZ = "https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:csv&sheet="+encodeURIComponent(TAB);
+const REFRESH_MS = 5*60*1000;
+const LS_KEY = "compdash_actions_v1";
+
+let MODEL = null;
+let mainApi = null, compApi = null;
+let currentView = "All";
+let kpiFilter = null;         // {label, fn}
+const FILTERS = {};           // key -> Set of selected values
+const INR = n => isFinite(n) ? "₹"+Math.round(n).toLocaleString("en-IN") : "—";
+const N = (n,d=0) => isFinite(n) ? Number(n).toLocaleString("en-IN",{maximumFractionDigits:d}) : "—";
+const YN = b => b ? "Yes" : "No";
+
+/* ---------- persistence ---------- */
+function loadActions(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||"{}"); }catch(e){ return {}; } }
+function saveAction(asin, field, val){ const a=loadActions(); a[asin]=a[asin]||{}; a[asin][field]=val; localStorage.setItem(LS_KEY, JSON.stringify(a)); }
+
+/* ---------- data load ---------- */
+function show(el,on){ document.getElementById(el).classList.toggle("hidden",!on); }
+function setLoading(on,msg){ show("loading",on); if(msg) document.getElementById("loadingMsg").textContent=msg; }
+function setConn(state,cls){ const e=document.getElementById("connState"); e.textContent=state; e.className="badge "+cls; }
+function setErr(msg){ const e=document.getElementById("errBar"); if(msg){ e.textContent=msg; show("errBar",true);} else show("errBar",false); }
+
+function rowsFromParsed(data){
+  // data = array of arrays incl header row 0 -> drop header
+  if(!data.length) return [];
+  return data.slice(1);
+}
+
+function loadLive(){
+  setLoading(true,"Fetching live Google Sheet…"); setErr("");
+  Papa.parse(GVIZ,{download:true, complete:res=>{
+    try{
+      const rows = rowsFromParsed(res.data);
+      if(rows.length<2){ throw new Error("empty"); }
+      MODEL = CompEngine.build(rows);
+      setConn("Live · connected","bg-emerald-600 text-white");
+      stamp(); renderAll(); setLoading(false);
+    }catch(e){ liveFail(e); }
+  }, error:e=>liveFail(e)});
+}
+function liveFail(e){
+  setLoading(false);
+  setConn("Live failed","bg-red-600 text-white");
+  setErr("Could not load the live sheet (check sharing = Anyone with the link · Viewer, and tab name '"+TAB+"'). Upload a CSV/XLSX export as fallback.");
+}
+function stamp(){ document.getElementById("lastRefresh").textContent = "Updated "+new Date().toLocaleString("en-IN"); }
+
+/* upload fallback */
+document.getElementById("fileInput").addEventListener("change",ev=>{
+  const f=ev.target.files[0]; if(!f) return; setLoading(true,"Reading file…"); setErr("");
+  const done=rows=>{ try{ MODEL=CompEngine.build(rows); setConn("File loaded","bg-indigo-600 text-white"); stamp(); renderAll(); }catch(e){ setErr("Parse error: "+e.message);} setLoading(false); };
+  if(/\.csv$/i.test(f.name)){
+    Papa.parse(f,{complete:r=>done(rowsFromParsed(r.data))});
+  } else {
+    const rd=new FileReader();
+    rd.onload=e=>{ const wb=XLSX.read(e.target.result,{type:"array"});
+      const ws=wb.Sheets[TAB]||wb.Sheets[wb.SheetNames[0]];
+      const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
+      done(rowsFromParsed(aoa)); };
+    rd.readAsArrayBuffer(f);
+  }
+});
+document.getElementById("btnRefresh").onclick=loadLive;
+document.getElementById("btnClearFilters").onclick=()=>{ Object.keys(FILTERS).forEach(k=>delete FILTERS[k]); kpiFilter=null; currentView="All"; buildFilters(); renderAll(); };
+
+/* ---------- filtering ---------- */
+const FILTER_DEFS = [
+  {key:"ourAsin",label:"Our ASIN",get:a=>[a.ourAsin]},
+  {key:"ourSku",label:"Our SKU",get:a=>[a.ourSku]},
+  {key:"ourDesc",label:"Product Desc",get:a=>[a.ourDesc]},
+  {key:"cat",label:"Category",get:a=>[a.cat]},
+  {key:"subcat",label:"Subcategory",get:a=>[a.subcat]},
+  {key:"compBrand",label:"Competitor Brand",get:a=>a.competitors.map(c=>c.compBrand)},
+  {key:"compAsin",label:"Competitor ASIN",get:a=>a.competitors.map(c=>c.compAsin)},
+  {key:"asp",label:"ASP",get:a=>[a.asp]},
+  {key:"checkPrice",label:"Check Price",get:a=>[a.checkPrice]},
+  {key:"pricePos",label:"Price Position",get:a=>[a.pricePos]},
+  {key:"priorityTier",label:"Priority",get:a=>[a.priorityTier]},
+  {key:"existingStatus",label:"Status",get:a=>[a.existingStatus||"(blank)"]},
+  {key:"recAction",label:"Price Action",get:a=>[a.recAction]},
+  {key:"primaryProblem",label:"Primary Problem",get:a=>[a.primaryProblem]},
+  {key:"stockRisk",label:"Stock Risk",get:a=>[a.stockRisk]},
+  {key:"stockBand",label:"Stock Days Range",get:a=>[stockBand(a.stockDays)]},
+  {key:"ourAplus",label:"Our A+",get:a=>[YN(a.ourAplus)]},
+  {key:"ourVideo",label:"Our Video",get:a=>[YN(a.ourVideo)]},
+  {key:"compAplus",label:"Comp A+",get:a=>a.competitors.map(c=>YN(c.compAplus))},
+  {key:"compVideo",label:"Comp Video",get:a=>a.competitors.map(c=>YN(c.compVideo))},
+];
+function stockBand(sd){ if(!isFinite(sd))return "Unknown"; if(sd<7)return "<7"; if(sd<16)return "7–15"; if(sd<=30)return "16–30"; if(sd<=60)return "31–60"; if(sd<=120)return "61–120"; return ">120"; }
+
+function buildFilters(){
+  const wrap=document.getElementById("filterGrid"); wrap.innerHTML="";
+  const asins = MODEL? MODEL.asins:[];
+  FILTER_DEFS.forEach(def=>{
+    const vals=new Set(); asins.forEach(a=>def.get(a).forEach(v=>{ if(v!==undefined&&v!==null&&String(v).trim()!=="") vals.add(String(v)); }));
+    const opts=[...vals].sort((x,y)=>x.localeCompare(y,undefined,{numeric:true}));
+    const div=document.createElement("div");
+    const sel = FILTERS[def.key]||new Set();
+    div.innerHTML=`<label class="block text-[11px] font-medium text-slate-500 mb-0.5">${def.label}</label>
+      <select multiple data-key="${def.key}" size="3" class="w-full border border-slate-300 rounded px-1 py-1 text-[11px]">
+        ${opts.map(o=>`<option value="${esc(o)}" ${sel.has(o)?"selected":""}>${esc(o)}</option>`).join("")}
+      </select>`;
+    wrap.appendChild(div);
+  });
+  wrap.querySelectorAll("select").forEach(s=>s.addEventListener("change",e=>{
+    const key=e.target.dataset.key; const chosen=[...e.target.selectedOptions].map(o=>o.value);
+    if(chosen.length) FILTERS[key]=new Set(chosen); else delete FILTERS[key];
+    renderAll(true);
+  }));
+}
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function passFilters(a){
+  for(const def of FILTER_DEFS){
+    const sel=FILTERS[def.key]; if(!sel||!sel.size) continue;
+    const vals=def.get(a).map(v=>v===undefined||v===null||String(v).trim()===""?(def.key==="existingStatus"?"(blank)":""):String(v));
+    if(!vals.some(v=>sel.has(v))) return false;
+  }
+  if(kpiFilter && !kpiFilter.fn(a)) return false;
+  if(currentView!=="All" && !VIEW_FN[currentView](a)) return false;
+  return true;
+}
+function filteredAsins(){ return MODEL? MODEL.asins.filter(passFilters):[]; }
+
+/* action views */
+const VIEW_FN = {
+  "All":()=>true,
+  "Price Reduction":a=>a.recAction==="Reduce Price",
+  "Match Competitor":a=>a.recAction==="Match Competitor",
+  "Maintain Price":a=>a.recAction==="Maintain Price",
+  "Increase Price":a=>a.recAction==="Increase Price",
+  "Price Is Not the Problem":a=>a.recAction==="Price Is Not the Problem",
+  "Low Stock - Do Not Reduce":a=>a.recAction==="Low Stock - Do Not Reduce",
+  "FC Stock Transfer":a=>a.nonPriceActions.includes("Move Warehouse Stock to FC"),
+  "Excess Stock":a=>isFinite(a.stockDays)&&a.stockDays>90,
+  "Missing A+":a=>a.nonPriceActions.includes("Create A+ Content"),
+  "Missing Video":a=>a.nonPriceActions.includes("Add Product Video"),
+  "Image Improvement":a=>a.nonPriceActions.includes("Improve Listing Images"),
+  "Rating & Review Issue":a=>a.nonPriceActions.includes("Investigate Product Experience")||a.nonPriceActions.includes("Build Review Strength"),
+  "Data Missing":a=>a.dataMissing
+};
+function buildViewTabs(){
+  const el=document.getElementById("viewTabs"); el.innerHTML="";
+  Object.keys(VIEW_FN).forEach(v=>{
+    const b=document.createElement("button");
+    b.className="tab px-2 py-1 rounded border border-slate-300 "+(v===currentView?"active":"bg-slate-50");
+    b.textContent=v; b.onclick=()=>{ currentView=v; buildViewTabs(); renderAll(true); };
+    el.appendChild(b);
+  });
+}
+
+/* ---------- KPI ---------- */
+function distinct(arr){ return new Set(arr).size; }
+function kpiDefs(){
+  const A=MODEL.asins, C=MODEL.comp;
+  return [
+    {t:"Our ASINs",v:A.length,fn:null},
+    {t:"Competitor ASINs",v:distinct(C.map(c=>c.compAsin).filter(Boolean)),fn:null},
+    {t:"Competitor Mappings",v:C.length,fn:null},
+    {t:"Above Benchmark",v:A.filter(a=>a.gapPct>0).length,fn:a=>a.gapPct>0},
+    {t:"Below Benchmark",v:A.filter(a=>a.gapPct<0).length,fn:a=>a.gapPct<0},
+    {t:"Reduce Price",v:A.filter(a=>a.recAction==="Reduce Price").length,fn:a=>a.recAction==="Reduce Price"},
+    {t:"Match Competitor",v:A.filter(a=>a.recAction==="Match Competitor").length,fn:a=>a.recAction==="Match Competitor"},
+    {t:"Maintain Price",v:A.filter(a=>a.recAction==="Maintain Price").length,fn:a=>a.recAction==="Maintain Price"},
+    {t:"Increase Price",v:A.filter(a=>a.recAction==="Increase Price").length,fn:a=>a.recAction==="Increase Price"},
+    {t:"Not a Price Problem",v:A.filter(a=>a.recAction==="Price Is Not the Problem").length,fn:a=>a.recAction==="Price Is Not the Problem"},
+    {t:"Stock < 15 Days",v:A.filter(a=>isFinite(a.stockDays)&&a.stockDays<15).length,fn:a=>isFinite(a.stockDays)&&a.stockDays<15},
+    {t:"Stock > 90 Days",v:A.filter(a=>isFinite(a.stockDays)&&a.stockDays>90).length,fn:a=>isFinite(a.stockDays)&&a.stockDays>90},
+    {t:"FC Stock = 0",v:A.filter(a=>!isFinite(a.fcStock)||a.fcStock<=0).length,fn:a=>!isFinite(a.fcStock)||a.fcStock<=0},
+    {t:"Missing Our A+",v:A.filter(a=>!a.ourAplus).length,fn:a=>!a.ourAplus},
+    {t:"Missing Our Video",v:A.filter(a=>!a.ourVideo).length,fn:a=>!a.ourVideo},
+    {t:"Rating < 4.0",v:A.filter(a=>isFinite(a.ourRating)&&a.ourRating<4.0).length,fn:a=>isFinite(a.ourRating)&&a.ourRating<4.0},
+    {t:"Critical Priority",v:A.filter(a=>a.priorityTier==="Critical").length,fn:a=>a.priorityTier==="Critical"},
+    {t:"High Priority",v:A.filter(a=>a.priorityTier==="High").length,fn:a=>a.priorityTier==="High"},
+  ];
+}
+function renderKPIs(){
+  const grid=document.getElementById("kpiGrid"); grid.innerHTML="";
+  kpiDefs().forEach(k=>{
+    const active = kpiFilter && kpiFilter.label===k.t;
+    const card=document.createElement("div");
+    card.className="kpi bg-white rounded-lg p-2.5 "+(active?"active":"")+(k.fn?"":" opacity-90");
+    card.innerHTML=`<div class="text-[11px] text-slate-500 leading-tight">${k.t}</div><div class="text-xl font-bold text-slate-800">${N(k.v)}</div>`;
+    if(k.fn){ card.onclick=()=>{ kpiFilter = active?null:{label:k.t,fn:k.fn}; renderAll(true); }; }
+    grid.appendChild(card);
+  });
+}
+
+/* ---------- charts ---------- */
+const LAY = {margin:{l:50,r:16,t:34,b:60},font:{size:11},title:{font:{size:13}}};
+function relayoutBrandFilter(brand){ FILTERS.compBrand = new Set([brand]); buildFilters(); renderAll(true); }
+
+function renderCharts(rows){
+  // 1 price comparison (top 20 by |gap|)
+  const top = rows.slice().filter(a=>isFinite(a.ourPrice)).sort((x,y)=>Math.abs(y.gapPct||0)-Math.abs(x.gapPct||0)).slice(0,20);
+  const lbl = top.map(a=>(a.ourDesc||a.ourAsin).slice(0,22));
+  Plotly.react("chartPrice",[
+    {x:lbl,y:top.map(a=>a.ourPrice),name:"Our Price",type:"bar",marker:{color:"#2563eb"}},
+    {x:lbl,y:top.map(a=>isFinite(a.benchPrice)?a.benchPrice:null),name:"Benchmark",type:"bar",marker:{color:"#f97316"}},
+    {x:lbl,y:top.map(a=>isFinite(a.testPrice)?a.testPrice:null),name:"Test Price",type:"scatter",mode:"markers",marker:{color:"#16a34a",size:9,symbol:"diamond"}}
+  ],Object.assign({title:"Our Price vs Benchmark vs Test (top 20 by gap)",barmode:"group",xaxis:{tickangle:-40}},LAY),{displaylogo:false,responsive:true})
+   .then(gd=>{ gd.removeAllListeners&&gd.removeAllListeners("plotly_click"); gd.on("plotly_click",e=>{ const i=e.points[0].pointIndex; const a=top[i]; if(a){ FILTERS.ourAsin=new Set([a.ourAsin]); buildFilters(); renderAll(true);} }); });
+
+  // 2 sales
+  const st=rows.filter(a=>isFinite(a.ourSales)||isFinite(a.benchSales)).slice(0,20);
+  const sl=st.map(a=>(a.ourDesc||a.ourAsin).slice(0,22));
+  Plotly.react("chartSales",[
+    {x:sl,y:st.map(a=>a.ourSales),name:"Our Sales",type:"bar",marker:{color:"#2563eb"}},
+    {x:sl,y:st.map(a=>a.benchSales),name:"Benchmark Sales",type:"bar",marker:{color:"#f97316"}},
+    {x:sl,y:st.map(a=>isFinite(a.salesMultiple)?a.salesMultiple:null),name:"Sales Multiple",yaxis:"y2",type:"scatter",mode:"lines+markers",marker:{color:"#7e22ce"}}
+  ],Object.assign({title:"Our vs Benchmark Monthly Sales",barmode:"group",xaxis:{tickangle:-40},yaxis2:{overlaying:"y",side:"right",title:"x"}},LAY),{displaylogo:false,responsive:true});
+
+  // 3 rank (lower better -> note)
+  const rk=rows.filter(a=>isFinite(a.ourRank)&&isFinite(a.benchRank)).slice(0,20);
+  const rl=rk.map(a=>(a.ourDesc||a.ourAsin).slice(0,22));
+  Plotly.react("chartRank",[
+    {x:rl,y:rk.map(a=>a.ourRank),name:"Our Rank",type:"bar",marker:{color:"#2563eb"}},
+    {x:rl,y:rk.map(a=>a.benchRank),name:"Benchmark Rank",type:"bar",marker:{color:"#f97316"}}
+  ],Object.assign({title:"Sales Rank (lower = better)",barmode:"group",xaxis:{tickangle:-40}},LAY),{displaylogo:false,responsive:true});
+
+  // 4 scatter price gap vs sales multiple
+  const sc=rows.filter(a=>isFinite(a.gapPct)&&isFinite(a.salesMultiple));
+  const grp={}; sc.forEach(a=>{(grp[a.recAction]=grp[a.recAction]||[]).push(a);});
+  Plotly.react("chartScatter1",Object.keys(grp).map(k=>({
+    x:grp[k].map(a=>a.gapPct),y:grp[k].map(a=>a.salesMultiple),text:grp[k].map(a=>a.ourAsin),name:k,mode:"markers",type:"scatter",
+    marker:{size:grp[k].map(a=>Math.max(6,Math.min(40,Math.sqrt(a.totalStock||1)/3)))}
+  })),Object.assign({title:"Price Gap % vs Competitor Sales Multiple (size=stock)",xaxis:{title:"Price Gap %"},yaxis:{title:"Sales Multiple"}},LAY),{displaylogo:false,responsive:true});
+
+  // 5 scatter stock days vs recommended change
+  const sc2=rows.filter(a=>isFinite(a.stockDays)&&isFinite(a.changePct));
+  const grp2={}; sc2.forEach(a=>{(grp2[a.stockRisk]=grp2[a.stockRisk]||[]).push(a);});
+  Plotly.react("chartScatter2",Object.keys(grp2).map(k=>({
+    x:grp2[k].map(a=>Math.min(a.stockDays,400)),y:grp2[k].map(a=>a.changePct),text:grp2[k].map(a=>a.ourAsin),name:k,mode:"markers",type:"scatter",
+    marker:{size:grp2[k].map(a=>Math.max(6,Math.min(34,Math.sqrt(a.ourSales||1))))}
+  })),Object.assign({title:"Stock Days vs Recommended Price Change % (size=sales)",xaxis:{title:"Stock Days (capped 400)"},yaxis:{title:"Change %"}},LAY),{displaylogo:false,responsive:true});
+
+  // 6 brand comparison
+  const bagg={};
+  MODEL.comp.forEach(c=>{ if(!c.compBrand) return;
+    const asinMatch = rows.some(a=>a.ourAsin===c.ourAsin); if(!asinMatch) return;
+    const b=bagg[c.compBrand]=bagg[c.compBrand]||{p:[],s:[],r:[],rt:[],n:0};
+    if(isFinite(c.compPrice))b.p.push(c.compPrice); if(isFinite(c.compSales))b.s.push(c.compSales);
+    if(isFinite(c.compRank))b.r.push(c.compRank); if(isFinite(c.compRating))b.rt.push(c.compRating); b.n++;
+  });
+  const brands=Object.keys(bagg).sort((a,b)=>bagg[b].n-bagg[a].n).slice(0,15);
+  const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+  Plotly.react("chartBrand",[
+    {x:brands,y:brands.map(b=>avg(bagg[b].p)),name:"Avg Price",type:"bar",marker:{color:"#0ea5e9"}},
+    {x:brands,y:brands.map(b=>avg(bagg[b].s)),name:"Avg Sales",yaxis:"y2",type:"scatter",mode:"markers",marker:{color:"#f97316",size:9}}
+  ],Object.assign({title:"Competitor Brands — Avg Price & Sales (top 15)",xaxis:{tickangle:-40},yaxis:{title:"₹"},yaxis2:{overlaying:"y",side:"right",title:"units"}},LAY),{displaylogo:false,responsive:true})
+   .then(gd=>{ gd.removeAllListeners&&gd.removeAllListeners("plotly_click"); gd.on("plotly_click",e=>relayoutBrandFilter(e.points[0].x)); });
+
+  // 7 action distribution
+  const acts=["Reduce Price","Match Competitor","Maintain Price","Increase Price","Price Is Not the Problem","Low Stock - Do Not Reduce"];
+  const contentN=rows.filter(a=>a.nonPriceActions.some(x=>/A\+|Video|Images/.test(x))).length;
+  const stockN=rows.filter(a=>a.nonPriceActions.some(x=>/Stock/.test(x))).length;
+  Plotly.react("chartAction",[{
+    x:acts.concat("Content Action","Stock Action"),
+    y:acts.map(k=>rows.filter(a=>a.recAction===k).length).concat(contentN,stockN),
+    type:"bar",marker:{color:["#dc2626","#4f46e5","#16a34a","#0891b2","#9333ea","#d97706","#2563eb","#334155"]}
+  }],Object.assign({title:"Action Distribution"},LAY),{displaylogo:false,responsive:true});
+}
+
+/* ---------- grids ---------- */
+function pill(v){ return `<span class="badge pill-${v}">${v}</span>`; }
+function actPill(v){ const map={"Reduce Price":"Reduce","Match Competitor":"Match","Maintain Price":"Maintain","Increase Price":"Increase","Price Is Not the Problem":"Notprice","Low Stock - Do Not Reduce":"Lowstock"}; const c=map[v]||"Missing"; return `<span class="badge act-${c}">${v}</span>`; }
+function linkCell(p){ return p.value?`<a href="${esc(p.value)}" target="_blank" class="text-blue-600 underline">open</a>`:""; }
+
+const numFmt=p=>isFinite(p.value)?Number(p.value).toLocaleString("en-IN",{maximumFractionDigits:0}):"";
+const inrFmt=p=>isFinite(p.value)?"₹"+Number(p.value).toLocaleString("en-IN",{maximumFractionDigits:0}):"";
+const pctFmt=p=>isFinite(p.value)?Number(p.value).toFixed(1)+"%":"";
+const dec1=p=>isFinite(p.value)?Number(p.value).toFixed(1):"";
+const ynFmt=p=>p.value?"Yes":"No";
+
+function mainColumns(){
+  const acts=loadActions();
+  return [
+    {headerName:"Priority",field:"priorityTier",width:95,pinned:"left",cellRenderer:p=>pill(p.value)},
+    {headerName:"Our ASIN",field:"ourAsin",width:120,pinned:"left"},
+    {headerName:"SKU",field:"ourSku",width:90,pinned:"left"},
+    {headerName:"Product",field:"ourDesc",width:200,pinned:"left"},
+    {headerName:"Cat",field:"cat",width:110},
+    {headerName:"SubCat",field:"subcat",width:130},
+    {headerName:"Our Price",field:"ourPrice",width:100,valueFormatter:inrFmt,type:"numericColumn"},
+    {headerName:"Our Sales",field:"ourSales",width:95,valueFormatter:numFmt,type:"numericColumn"},
+    {headerName:"Our Rank",field:"ourRank",width:95,valueFormatter:numFmt,type:"numericColumn"},
+    {headerName:"Our Rating",field:"ourRating",width:90,valueFormatter:dec1,type:"numericColumn"},
+    {headerName:"Our Reviews",field:"ourReviews",width:100,valueFormatter:numFmt,type:"numericColumn"},
+    {headerName:"A+",field:"ourAplus",width:60,valueFormatter:ynFmt},
+    {headerName:"Video",field:"ourVideo",width:65,valueFormatter:ynFmt},
+    {headerName:"Imgs",field:"ourImg",width:65,valueFormatter:numFmt,type:"numericColumn"},
+    {headerName:"DRR",field:"drr",width:80,valueFormatter:dec1,type:"numericColumn"},
+    {headerName:"FC",field:"fcStock",width:80,valueFormatter:numFmt,type:"numericColumn"},
+    {headerName:"WH",field:"whStock",width:80,valueFormatter:numFmt,type:"numericColumn"},
+    {headerName:"Total Stock",field:"totalStock",width:100,valueFormatter:numFmt,type:"numericColumn"},
+    {headerName:"Stock Days",field:"stockDays",width:100,valueFormatter:p=>isFinite(p.value)?Number(p.value).toFixed(0):"",type:"numericColumn"},
+    {headerName:"Stock Risk",field:"stockRisk",width:130},
+    {headerName:"Bench ASIN",field:"benchAsin",width:120},
+    {headerName:"Bench Brand",field:"benchBrand",width:120},
+    {headerName:"Bench Price",field:"benchPrice",width:100,valueFormatter:inrFmt,type:"numericColumn"},
+    {headerName:"Bench Sales",field:"benchSales",width:100,valueFormatter:numFmt,type:"numericColumn"},
+    {headerName:"Bench Rank",field:"benchRank",width:100,valueFormatter:numFmt,type:"numericColumn"},
+    {headerName:"Bench Rating",field:"benchRating",width:100,valueFormatter:dec1,type:"numericColumn"},
+    {headerName:"Bench Reviews",field:"benchReviews",width:110,valueFormatter:numFmt,type:"numericColumn"},
+    {headerName:"B.A+",field:"benchAplus",width:60,valueFormatter:ynFmt},
+    {headerName:"B.Video",field:"benchVideo",width:70,valueFormatter:ynFmt},
+    {headerName:"B.Imgs",field:"benchImg",width:70,valueFormatter:numFmt,type:"numericColumn"},
+    {headerName:"Strength",field:"benchStrength",width:90,valueFormatter:dec1,type:"numericColumn"},
+    {headerName:"Price Diff",field:"priceDiff",width:95,valueFormatter:inrFmt,type:"numericColumn"},
+    {headerName:"Gap %",field:"gapPct",width:85,valueFormatter:pctFmt,type:"numericColumn"},
+    {headerName:"Sales Mult",field:"salesMultipleLabel",width:100},
+    {headerName:"Rank Gap",field:"rankGap",width:90,valueFormatter:numFmt,type:"numericColumn"},
+    {headerName:"Rating Gap",field:"ratingGap",width:95,valueFormatter:dec1,type:"numericColumn"},
+    {headerName:"Review Mult",field:"reviewMultiple",width:100,valueFormatter:p=>isFinite(p.value)?p.value.toFixed(1)+"x":"",type:"numericColumn"},
+    {headerName:"Price Action",field:"recAction",width:190,cellRenderer:p=>actPill(p.value)},
+    {headerName:"Test Price",field:"testPrice",width:100,valueFormatter:inrFmt,type:"numericColumn"},
+    {headerName:"Change %",field:"changePct",width:90,valueFormatter:pctFmt,type:"numericColumn"},
+    {headerName:"Primary Problem",field:"primaryProblem",width:170},
+    {headerName:"Primary Action",field:"primaryAction",width:180},
+    {headerName:"Secondary Action",field:"secondaryAction",width:180},
+    {headerName:"Bench Reason",field:"benchReason",width:260,tooltipField:"benchReason"},
+    {headerName:"Recommendation",field:"recReason",width:320,tooltipField:"recReason"},
+    {headerName:"Existing Status",field:"existingStatus",width:130},
+    {headerName:"Existing Priority",field:"existingPriority",width:130},
+    // editable tracking (localStorage)
+    {headerName:"Owner",field:"_owner",width:110,editable:true,valueGetter:p=>acts[p.data.ourAsin]?.owner||"",onCellValueChanged:e=>saveAction(e.data.ourAsin,"owner",e.newValue)},
+    {headerName:"Track Status",field:"_status",width:120,editable:true,valueGetter:p=>acts[p.data.ourAsin]?.status||"",onCellValueChanged:e=>saveAction(e.data.ourAsin,"status",e.newValue)},
+    {headerName:"Comments",field:"_comments",width:180,editable:true,valueGetter:p=>acts[p.data.ourAsin]?.comments||"",onCellValueChanged:e=>saveAction(e.data.ourAsin,"comments",e.newValue)},
+    {headerName:"Link",field:"link",width:70,cellRenderer:linkCell},
+  ];
+}
+function compColumns(){
+  return [
+    {headerName:"Our ASIN",field:"ourAsin",width:120,pinned:"left"},
+    {headerName:"SKU",field:"ourSku",width:90,pinned:"left"},
+    {headerName:"Product",field:"ourDesc",width:190,pinned:"left"},
+    {headerName:"Cat",field:"cat",width:110},
+    {headerName:"SubCat",field:"subcat",width:120},
+    {headerName:"Our Price",field:"ourPrice",width:95,valueFormatter:inrFmt},
+    {headerName:"Our Sales",field:"ourSales",width:95,valueFormatter:numFmt},
+    {headerName:"Our Rank",field:"ourRank",width:95,valueFormatter:numFmt},
+    {headerName:"Comp ASIN",field:"compAsin",width:120},
+    {headerName:"Comp Brand",field:"compBrand",width:120},
+    {headerName:"Comp Price",field:"compPrice",width:100,valueFormatter:inrFmt},
+    {headerName:"Comp Sales",field:"compSales",width:100,valueFormatter:numFmt},
+    {headerName:"Comp Rank",field:"compRank",width:100,valueFormatter:numFmt},
+    {headerName:"Comp Rating",field:"compRating",width:100,valueFormatter:dec1},
+    {headerName:"Comp Reviews",field:"compReviews",width:110,valueFormatter:numFmt},
+    {headerName:"A+",field:"compAplus",width:55,valueFormatter:ynFmt},
+    {headerName:"Video",field:"compVideo",width:60,valueFormatter:ynFmt},
+    {headerName:"Imgs",field:"compImg",width:60,valueFormatter:numFmt},
+    {headerName:"Price Diff",field:"priceDiff",width:95,valueFormatter:inrFmt},
+    {headerName:"Gap %",field:"gapPct",width:85,valueFormatter:pctFmt},
+    {headerName:"Sales Mult",field:"salesMultipleLabel",width:100},
+    {headerName:"Rank Gap",field:"rankGap",width:90,valueFormatter:numFmt},
+    {headerName:"Rating Gap",field:"ratingGap",width:95,valueFormatter:dec1},
+    {headerName:"Review Mult",field:"reviewMultiple",width:100,valueFormatter:p=>isFinite(p.value)?p.value.toFixed(1)+"x":""},
+    {headerName:"Strength",field:"strength",width:90,valueFormatter:dec1},
+    {headerName:"Cheapest",field:"flagCheapest",width:85,valueFormatter:p=>p.value?"✓":""},
+    {headerName:"Top Sell",field:"flagTopSell",width:85,valueFormatter:p=>p.value?"✓":""},
+    {headerName:"Best Rank",field:"flagBestRank",width:85,valueFormatter:p=>p.value?"✓":""},
+    {headerName:"Benchmark",field:"flagBench",width:95,valueFormatter:p=>p.value?"★":"",cellStyle:p=>p.value?{color:"#b45309",fontWeight:"700"}:null},
+    {headerName:"Bench Reason",field:"benchReason",width:260,tooltipField:"benchReason"},
+    {headerName:"Link",field:"link",width:70,cellRenderer:linkCell},
+  ];
+}
+function rowColor(params){
+  const t=params.data.priorityTier;
+  if(params.data.dataMissing) return {background:"#f1f5f9"};
+  if(t==="Critical") return {background:"#fef2f2"};
+  if(t==="High") return {background:"#fff7ed"};
+  if(t==="Medium") return {background:"#fefce8"};
+  return null;
+}
+
+function initGrids(){
+  const gridOpts=extra=>Object.assign({
+    defaultColDef:{sortable:true,resizable:true,filter:true,suppressMovable:false},
+    pagination:true,paginationPageSize:50,tooltipShowDelay:300,
+    animateRows:false
+  },extra);
+  mainApi = agGrid.createGrid(document.getElementById("mainGrid"), gridOpts({
+    columnDefs:mainColumns(), rowData:[], getRowStyle:rowColor,
+    onRowClicked:e=>showReco(e.data)
+  }));
+  compApi = agGrid.createGrid(document.getElementById("compGrid"), gridOpts({
+    columnDefs:compColumns(), rowData:[]
+  }));
+  document.getElementById("mainSearch").addEventListener("input",e=>mainApi.setGridOption("quickFilterText",e.target.value));
+  document.getElementById("compSearch").addEventListener("input",e=>compApi.setGridOption("quickFilterText",e.target.value));
+}
+
+/* ---------- recommendation panel ---------- */
+function showReco(a){
+  show("recoPanel",true);
+  document.getElementById("recoAsin").textContent=a.ourAsin+" · "+(a.ourDesc||"");
+  const npa=a.nonPriceActions.length?a.nonPriceActions.join("; "):"None";
+  document.getElementById("recoBody").innerHTML=
+    `<p class="mb-2"><b>Benchmark:</b> ${esc(a.benchReason)}</p>
+     <p class="mb-2"><b>Price action (${esc(a.recAction)}):</b> ${esc(a.recReason)}</p>
+     <p class="mb-2"><b>Recommended test price:</b> ${INR(a.testPrice)} (${isFinite(a.changePct)?a.changePct.toFixed(1)+"%":"0%"}) · <b>Primary problem:</b> ${esc(a.primaryProblem)}</p>
+     <p><b>Non-price actions:</b> ${esc(npa)}</p>`;
+  document.getElementById("btnCopyReco").onclick=()=>navigator.clipboard.writeText(recoText(a));
+}
+function recoText(a){
+  return `${a.ourAsin} | ${a.ourDesc}\nAction: ${a.recAction} | Test price: ${INR(a.testPrice)}\nBenchmark: ${a.benchBrand} (${a.benchAsin}) @ ${INR(a.benchPrice)}\n${a.recReason}\nNon-price: ${a.nonPriceActions.join("; ")||"None"}`;
+}
+
+/* ---------- export ---------- */
+function exportRows(rows, cols, name){
+  const data=rows.map(r=>{ const o={}; cols.forEach(c=>{ let v=r[c.field]; if(typeof v==="boolean")v=v?"Yes":"No"; o[c.headerName]=(v===undefined||v===null||(typeof v==="number"&&!isFinite(v)))?"":v; }); return o; });
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,name.slice(0,28));
+  XLSX.writeFile(wb,name+".xlsx");
+}
+document.getElementById("btnExportMain").onclick=()=>exportRows(filteredAsins(),mainColumns().filter(c=>!c.field.startsWith("_")),"Main_Action_Table");
+document.getElementById("btnExportComp").onclick=()=>{
+  const set=new Set(filteredAsins().map(a=>a.ourAsin));
+  exportRows(MODEL.comp.filter(c=>set.has(c.ourAsin)),compColumns(),"All_Competitor_Comparison");
+};
+document.getElementById("btnCopyRecos").onclick=()=>navigator.clipboard.writeText(filteredAsins().map(recoText).join("\n\n"));
+document.getElementById("btnCopyAsins").onclick=()=>navigator.clipboard.writeText(filteredAsins().map(a=>a.ourAsin).join("\n"));
+
+/* ---------- render orchestration ---------- */
+function renderAll(keepFilters){
+  if(!MODEL) return;
+  if(!keepFilters) buildFilters();
+  renderKPIs();
+  const rows=filteredAsins();
+  document.getElementById("activeFilterSummary").textContent =
+    rows.length+" of "+MODEL.asins.length+" ASINs"+(kpiFilter?" · KPI: "+kpiFilter.label:"")+(currentView!=="All"?" · View: "+currentView:"");
+  renderCharts(rows);
+  mainApi.setGridOption("rowData",rows);
+  const set=new Set(rows.map(a=>a.ourAsin));
+  compApi.setGridOption("rowData",MODEL.comp.filter(c=>set.has(c.ourAsin)));
+}
+
+/* ---------- boot ---------- */
+window.addEventListener("load",()=>{
+  initGrids(); buildViewTabs();
+  loadLive();
+  setInterval(loadLive, REFRESH_MS);
+});
+</script>
+</body>
+</html>
