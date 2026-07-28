@@ -57,6 +57,21 @@
   .ms-opt input{accent-color:#2563eb;width:14px;height:14px;cursor:pointer}
   .ms-opt.hide{display:none}
   .ms-empty{padding:10px;font-size:11px;color:#94a3b8;text-align:center}
+  /* ---- glossary ---- */
+  .acc-body{display:none}
+  .acc.open .acc-body{display:block}
+  .acc.open .acc-chev{transform:rotate(180deg)}
+  .acc-chev{transition:transform .15s;color:#94a3b8}
+  .gloss h4{font-weight:700;color:#0f172a;font-size:13px;margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid #e2e8f0}
+  .gloss{font-size:12.5px;color:#475569;line-height:1.55}
+  .gloss b{color:#1e293b}
+  .gloss .row{display:grid;grid-template-columns:170px 1fr;gap:8px;padding:3px 0}
+  .gloss .row .k{font-weight:600;color:#334155}
+  .gloss .wt{display:inline-block;background:#eff6ff;color:#1d4ed8;font-weight:700;border-radius:6px;padding:0 6px;font-size:11px}
+  @media (max-width:640px){
+    .gloss .row{grid-template-columns:1fr;gap:1px;padding:5px 0;border-bottom:1px solid #f1f5f9}
+    #chartPrice,#chartSales,#chartRank,#chartBrand{height:300px!important}
+  }
 </style>
 </head>
 <body class="text-sm">
@@ -82,7 +97,52 @@
 </div>
 <div id="errBar" class="hidden bg-red-600 text-white px-4 py-2 text-sm"></div>
 
-<main class="p-4 space-y-4 max-w-[1900px] mx-auto">
+<main class="p-3 sm:p-4 space-y-4 max-w-[1900px] mx-auto">
+
+  <!-- Glossary -->
+  <section id="glossary" class="acc bg-white rounded-lg border border-slate-200">
+    <button id="glossaryToggle" class="w-full flex items-center justify-between px-4 py-3 font-semibold text-slate-700 text-sm">
+      <span>Glossary — Metrics &amp; Benchmark Logic</span><span class="acc-chev">&#9662;</span>
+    </button>
+    <div class="acc-body gloss px-4 pb-4 border-t border-slate-100">
+      <h4>Core Metrics</h4>
+      <div class="row"><span class="k">Price Difference</span><span>Our Price &minus; Competitor Price (₹). Positive = we are dearer.</span></div>
+      <div class="row"><span class="k">Price Gap %</span><span>((Our Price &minus; Competitor Price) / Competitor Price) &times; 100. Blank when competitor price is missing/zero.</span></div>
+      <div class="row"><span class="k">Sales Multiple</span><span>Competitor Sales / Our Sales. Shows <b>New/No Sales</b> when our sales are zero (never Infinity).</span></div>
+      <div class="row"><span class="k">Rank Gap</span><span>Our Rank &minus; Competitor Rank. <b>Positive = competitor ranks better</b> (lower rank number is better).</span></div>
+      <div class="row"><span class="k">Rating Gap</span><span>Competitor Rating &minus; Our Rating.</span></div>
+      <div class="row"><span class="k">Review Multiple</span><span>Competitor Reviews / Our Reviews.</span></div>
+      <div class="row"><span class="k">Content Gap</span><span>+1 each: competitor has A+ (we don't), has video (we don't), or more images than us.</span></div>
+      <div class="row"><span class="k">Total Stock</span><span>FC Stock + Warehouse Stock.</span></div>
+      <div class="row"><span class="k">Stock Days</span><span>Days of cover from the source sheet — drives the stock-risk band and price guardrails.</span></div>
+
+      <h4>Stock Risk Bands (Stock Days)</h4>
+      <div class="row"><span class="k">Critical Low</span><span>&lt; 7 days &nbsp;·&nbsp; <b>Low</b> 7&ndash;15 &nbsp;·&nbsp; <b>Controlled</b> 16&ndash;30 &nbsp;·&nbsp; <b>Healthy</b> 31&ndash;60 &nbsp;·&nbsp; <b>High</b> 61&ndash;120 &nbsp;·&nbsp; <b>Excess</b> &gt; 120</span></div>
+
+      <h4>Competitor Strength Score (out of 100)</h4>
+      <div class="row"><span class="k">Weights</span><span>
+        <span class="wt">Monthly Sales 30</span> <span class="wt">Sales Rank 20</span> <span class="wt">Reviews 15</span>
+        <span class="wt">Rating 10</span> <span class="wt">Price 10</span> <span class="wt">A+ 5</span> <span class="wt">Video 5</span> <span class="wt">Images 5</span></span></div>
+      <div class="row"><span class="k">Rules</span><span>Higher sales, rating, reviews &rarr; higher score. Lower sales rank &amp; lower price &rarr; higher score. Reviews use <b>log scaling</b>. A+/Video treated case-insensitively (yes/true/1). Scores are computed <b>relative to competitors mapped to the same Our ASIN</b>; missing values count as zero.</span></div>
+
+      <h4>Benchmark Competitor Selection</h4>
+      <div class="row"><span class="k">Primary rule</span><span>The competitor with the <b>highest strength score</b> for that Our ASIN — not automatically the cheapest.</span></div>
+      <div class="row"><span class="k">Excluded</span><span>Missing competitor ASIN or price, mostly-blank competitor data, or competitor ASIN equal to our ASIN.</span></div>
+      <div class="row"><span class="k">Tie-breakers</span><span>When strength scores are close: higher monthly sales &rarr; better sales rank &rarr; stronger review count &rarr; price closest to our current price.</span></div>
+
+      <h4>Price Action Logic</h4>
+      <div class="row"><span class="k">Low Stock (override)</span><span>Stock &lt; 15 days: <b>do not reduce</b> — maintain price, replenish; if &lt; 7 days a 3&ndash;5% increase is allowed. Overrides all reduction rules.</span></div>
+      <div class="row"><span class="k">Reduce Price</span><span>We are &gt;5% above a stronger benchmark and stock &gt; 30 days. Reduction band by cover: 31&ndash;60 &rarr; 3%, 61&ndash;120 &rarr; 5%, &gt;120 &rarr; 8%. Staged (not matched) when competitor is &gt;20% below us.</span></div>
+      <div class="row"><span class="k">Match Competitor</span><span>We are within 5% above a stronger benchmark and stock &gt; 30 days &rarr; test at benchmark price.</span></div>
+      <div class="row"><span class="k">Increase Price</span><span>We are &gt;10% below benchmark, our rank matches/beats it, sales healthy, stock &lt; 20 days &rarr; +3% (never above benchmark on first test).</span></div>
+      <div class="row"><span class="k">Maintain Price</span><span>Price already competitive and competitor data is weak &rarr; hold and focus on stock/content.</span></div>
+      <div class="row"><span class="k">Price Is Not the Problem</span><span>We are at/below a benchmark that outsells and out-ranks us &rarr; fix rating, reviews, A+, video, images or FC stock instead of cutting price.</span></div>
+      <div class="row"><span class="k">Test price rounding</span><span>Snapped to customer-friendly endings in 9 (₹199, ₹249, ₹299 …).</span></div>
+
+      <h4>Priority Tiers</h4>
+      <div class="row"><span class="k">Source</span><span>Uses the sheet's <b>Priorities</b> column when present, else computed. <b class="badge pill-Critical">Critical</b> <b class="badge pill-High">High</b> <b class="badge pill-Medium">Medium</b> <b class="badge pill-Normal">Normal</b> drive row colours.</span></div>
+    </div>
+  </section>
 
   <!-- KPI cards -->
   <section>
@@ -90,9 +150,9 @@
   </section>
 
   <!-- Filters -->
-  <section class="bg-white rounded-lg border border-slate-200 p-3 sticky top-[46px] z-30">
+  <section class="bg-white rounded-lg border border-slate-200 p-3 md:sticky md:top-[46px] z-30">
     <div class="flex items-center justify-between mb-2">
-      <div class="font-semibold text-slate-700">Filters</div>
+      <button id="filterToggle" class="font-semibold text-slate-700 flex items-center gap-2">Filters <span id="filterChev" class="acc-chev">&#9662;</span></button>
       <div id="activeFilterSummary" class="text-xs text-slate-500"></div>
     </div>
     <div id="filterGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-xs"></div>
@@ -1053,8 +1113,17 @@ function renderAll(keepFilters){
 }
 
 /* ---------- boot ---------- */
+function initToggles(){
+  const gl=document.getElementById("glossary");
+  document.getElementById("glossaryToggle").onclick=()=>gl.classList.toggle("open");
+  const fg=document.getElementById("filterGrid"), fc=document.getElementById("filterChev");
+  let open = window.innerWidth >= 768;
+  const apply=()=>{ fg.style.display=open?"":"none"; fc.style.transform=open?"rotate(180deg)":""; };
+  document.getElementById("filterToggle").onclick=()=>{ open=!open; apply(); };
+  apply();
+}
 window.addEventListener("load",()=>{
-  initGrids(); buildViewTabs();
+  initGrids(); buildViewTabs(); initToggles();
   loadLive();
   setInterval(loadLive, REFRESH_MS);
 });
